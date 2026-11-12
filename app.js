@@ -1,4 +1,4 @@
-const changes = [
+let changes = [
   {
     id: "sign", task: "Issue signed sessions", capability: "Account security", module: "Session service",
     risk: "High", milestone: "Secure authentication", path: "src/auth/session.ts", oldLine: 12, newLine: 12,
@@ -33,8 +33,11 @@ const changes = [
   },
 ];
 
+const live = new URLSearchParams(location.search).has("live");
+if (live) changes = [];
+
 const fields = { task: "Implementation task", capability: "Business capability", module: "Architecture module", risk: "Review priority", milestone: "Conversation milestone" };
-const state = { task: "", view: "story", group: "task", selected: changes[0].id };
+const state = { task: "", view: "story", group: "task", selected: changes[0]?.id };
 const byId = (id) => document.getElementById(id);
 const tasks = byId("task");
 tasks.add(new Option("All objectives", ""));
@@ -121,6 +124,13 @@ function diffColumn(lines, oldStart, newStart, side) {
 
 function renderDetail() {
   const change = changes.find(({ id }) => id === state.selected);
+  if (!change) {
+    byId("path").textContent = "No selected change";
+    byId("evidence").textContent = "";
+    byId("verification").textContent = "";
+    byId("diff").replaceChildren();
+    return;
+  }
   byId("path").textContent = `${change.path} · line ${change.newLine}`;
   byId("evidence").textContent = change.evidence;
   byId("verification").textContent = change.verification;
@@ -154,10 +164,46 @@ activate(byId("navigation"), "hunk", (id) => {
 tasks.addEventListener("change", () => {
   state.task = tasks.value;
   const current = changes.find(({ id }) => id === state.selected);
-  if (state.task && current.task !== state.task) state.selected = changes.find(({ task }) => task === state.task).id;
+  if (state.task && current?.task !== state.task) state.selected = changes.find(({ task }) => task === state.task).id;
   renderNavigation();
   renderDetail();
 });
 byId("layout").addEventListener("change", renderDetail);
 renderNavigation();
 renderDetail();
+
+if (live) {
+  byId("host").hidden = true;
+  byId("workspace").dataset.mode = "max";
+  byId("modes").hidden = true;
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  const refresh = document.createElement("button");
+  refresh.textContent = "Refresh Git changes";
+  byId("panel").prepend(status, refresh);
+  async function loadChanges() {
+    refresh.disabled = true;
+    status.textContent = "Reading test repository…";
+    try {
+      const response = await fetch("/agent-xray/changes");
+      if (!response.ok) throw new Error("Git changes unavailable (HTTP " + response.status + ")");
+      const result = await response.json();
+      changes = result.changes;
+      if (!changes.some((change) => change.id === state.selected)) state.selected = changes[0]?.id;
+      state.task = "";
+      tasks.replaceChildren(new Option("All objectives", ""));
+      for (const task of new Set(changes.map((change) => change.task))) tasks.add(new Option(task, task));
+      status.textContent = result.note;
+    } catch (error) {
+      changes = [];
+      state.selected = undefined;
+      status.textContent = error.message;
+    } finally {
+      refresh.disabled = false;
+      renderNavigation();
+      renderDetail();
+    }
+  }
+  refresh.addEventListener("click", loadChanges);
+  loadChanges();
+}

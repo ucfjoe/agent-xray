@@ -1,0 +1,19 @@
+{
+  "name": "dsh-agent-xray",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "plugin/index.js",
+  "exports": { ".": "./plugin/index.js", "./client": "./plugin/client.js", "./package.json": "./package.json" },
+  "files": ["plugin", "index.html", "app.js", "style.css", "cordis.patch.yml"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-runtime"] }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lab:setup": "node scripts/setup-lab.js",
+    "lab:start": "node scripts/start-lab.js"
+  },
+  "engines": { "node": ">=22.19.0" }
+}
