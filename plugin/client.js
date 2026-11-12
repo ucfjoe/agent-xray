@@ -76,13 +76,13 @@ window.__ModuleLoader__.load({
         );
         inner.effect(
           () =>
-            slots.inject("sidebar.right.pane.tab", (sessionId) =>
+            slots.inject("sidebar.right.pane.tab", () =>
               slots.register(
                 {
                   name: "sidebar.right.pane.tab",
                   key: "dsh-agent-xray",
                 },
-                () => React.createElement(Panel, { sessionId }),
+                Panel,
               ),
             ),
           "agent-xray: sidebar body",

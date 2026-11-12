@@ -162,3 +162,57 @@ test("keyboard focus survives tabs, file drill-down and back", async ({
   await page.keyboard.press("Enter");
   await expect(page.locator(".file-row.selected")).toBeFocused();
 });
+
+test("selected exact line survives view changes and reload", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto("/");
+  await page.locator(".file-row").first().click();
+  await page.locator('[data-code-line="13"][data-code-side="next"]').click();
+  await expect(page.locator('[data-line-selected="true"]')).toHaveCount(1);
+  await page.getByRole("tab", { name: "Changes", exact: true }).click();
+  await expect(page.locator('[data-line-selected="true"]')).toHaveCount(1);
+  await page.reload();
+  await expect(page.locator('[data-line-selected="true"]')).toHaveCount(1);
+});
+
+test("100 changed files remain searchable without document overflow", async ({
+  page,
+}) => {
+  const hunks = Array.from({ length: 100 }, (_, i) => ({
+    id: "h" + i,
+    path: `src/deep/module-${i}/long-component-name-${i}.ts`,
+    title: "Update component " + i,
+    oldStart: 1,
+    newStart: 1,
+    lines: ["-old", "+new"],
+  }));
+  await page.route("**/agent-xray/review?**", (route) =>
+    route.fulfill({
+      json: {
+        source: "live",
+        sessionId: "s",
+        snapshotId: "large",
+        title: "Large review",
+        hunks,
+        files: [],
+        events: [],
+        objectives: [],
+        relationships: [],
+        checks: [],
+        notices: [],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 380, height: 900 });
+  await page.goto("/?live=1&session=s");
+  await expect(page.locator(".file-row")).toHaveCount(100);
+  await page.getByPlaceholder("Find a file or symbol…").fill("module-99/");
+  await expect(page.locator(".file-row")).toHaveCount(1);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});

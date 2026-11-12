@@ -8,7 +8,7 @@ test("registers X-Ray as a retained native right-sidebar panel", async () => {
   const registrations = [];
   const definitions = [];
   const slots = {
-    inject: (_name, callback) => callback("session-a"),
+    inject: (_name, callback) => callback(),
     register: (entry, component) => {
       registrations.push({ entry, component });
       return () => {};
@@ -23,7 +23,7 @@ test("registers X-Ray as a retained native right-sidebar panel", async () => {
           register: (definition) => definitions.push(definition),
         },
       })[name],
-    effect: (callback) => callback("session-a"),
+    effect: (callback) => callback(),
   };
   vm.runInNewContext(
     await readFile(new URL("../plugin/client.js", import.meta.url), "utf8"),
@@ -52,8 +52,8 @@ test("registers X-Ray as a retained native right-sidebar panel", async () => {
     ["sidebar.right.pane.tab"],
   );
   assert.equal(registrations[0].entry.key, definitions[0].id);
-  const wrapper = registrations[0].component();
-  const panel = wrapper.type(wrapper.props);
+  let panel = registrations[0].component({ sessionId: "session-a" });
+  if (typeof panel.type === "function") panel = panel.type(panel.props);
   assert.equal(
     panel.props.src,
     "/agent-xray/index.html?live=1&session=session-a",

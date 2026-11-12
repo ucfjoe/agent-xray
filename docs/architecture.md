@@ -2,7 +2,7 @@
 
 ## Host boundary
 
-`plugin/client.js` registers a retained native right-sidebar body. Its session-scoped factory supplies the exact session ID to the iframe. DSH owns docking, resizing and fullscreen. Theme tokens and font settings are mirrored from the host.
+`plugin/client.js` registers a retained native right-sidebar body. Its session-scoped component props supply the exact session ID to the iframe. DSH owns docking, resizing and fullscreen. Theme tokens and font settings are mirrored from the host.
 
 Authenticated routes in `plugin/index.js` serve an explicit asset allowlist and `/agent-xray/review`. Session/workspace roots come from `sessionQuery.readSession`, never from browser-supplied filesystem paths. `/agent-xray/changes` is a legacy explicit-lab smoke endpoint; normal panels do not use it.
 
