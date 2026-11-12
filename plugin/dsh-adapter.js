@@ -1,7 +1,8 @@
+import { sessionPath } from "./session-path.js";
 import { classifyPaths } from "../core/evidence.js";
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, normalize } from "node:path";
 import { structuredPatch } from "diff";
 import { normalizeSnapshot } from "../core/model.js";
 const digest = (x) =>
@@ -32,7 +33,13 @@ export async function readSessionReview(
   const cwd = log.session.cwd;
   if (!cwd || !isAbsolute(cwd))
     throw Error("This session has no workspace directory.");
-  const root = await realpath(cwd);
+  let root;
+  try {
+    root = await realpath(cwd);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    root = normalize(cwd); // Recorded evidence remains readable after workspace removal.
+  }
   const raw = [
     ...new Map(
       log.events
@@ -48,6 +55,7 @@ export async function readSessionReview(
     workspaceId: digest(root),
     root,
     snapshotId,
+    pathScopeVersion: 2,
     identity: {
       kind: "review-history",
       throughSeq: raw.at(-1)?.seq ?? -1,
@@ -181,7 +189,25 @@ export async function readSessionReview(
       if (!call) continue;
       const action = model.events.find((x) => x.id === call.eventId);
       action.status = d.message?.isError ? "failed" : "completed";
-      const diffs = Array.isArray(d.meta?.diffs) ? d.meta.diffs : [];
+      let diffs = Array.isArray(d.meta?.diffs) ? d.meta.diffs : [];
+      // DSH's write/create presentation intentionally omits diffs and uses call content.
+      if (
+        call.name === "write" &&
+        !d.message?.isError &&
+        d.meta?.operation === "create" &&
+        Array.isArray(d.meta.diffs) &&
+        !d.meta.diffs.length &&
+        typeof call.args.file_path === "string" &&
+        typeof call.args.content === "string"
+      ) {
+        diffs = [
+          {
+            path: call.args.file_path,
+            oldText: null,
+            newText: call.args.content,
+          },
+        ];
+      }
       for (const [i, diff] of diffs.entries()) {
         if (
           !diff ||
@@ -203,13 +229,20 @@ export async function readSessionReview(
           );
           continue;
         }
-        const path = isAbsolute(diff.path)
-          ? relative(root, diff.path)
-          : diff.path;
-        if (path === ".." || path.startsWith("../")) {
-          model.notices.push("An edit outside this workspace was omitted.");
+        const location = sessionPath(diff.path, cwd, root);
+        if (!location) {
+          model.notices.push(
+            "An edit with an invalid recorded path was omitted.",
+          );
           continue;
         }
+        const { path } = location;
+        if (
+          call.name === "write" &&
+          d.meta?.operation === "create" &&
+          !d.message?.isError
+        )
+          model.files.push({ id: path, ...location, kind: "created" });
         const patch = structuredPatch(
           path,
           path,
@@ -226,7 +259,7 @@ export async function readSessionReview(
         for (const [j, p] of patch.hunks.entries()) {
           const h = {
             id: id(e) + ":" + i + ":" + j,
-            path,
+            ...location,
             title: call.name + " " + path.split("/").at(-1),
             lines: p.lines.filter(
               (l) => /^[ +\-]/.test(l) || l.startsWith("\\ No newline"),
@@ -265,6 +298,9 @@ export async function readSessionReview(
       }
     }
     if (e.type === "workspace/changes") {
+      let comparisonComplete = true;
+      const fileStart = model.files.length,
+        hunkStart = model.hunks.length;
       let saved;
       try {
         saved = await services.readCheckpoint?.(sessionId, e.seq);
@@ -273,7 +309,25 @@ export async function readSessionReview(
           "A saved turn comparison could not be read; trying the host comparison.",
         );
       }
-      if (saved) {
+      let summary;
+      try {
+        summary =
+          saved?.pathScopeVersion === 2
+            ? undefined
+            : services.workspaceChanges?.summary(sessionId, e.seq);
+      } catch {
+        model.notices.push(
+          "The host comparison is unavailable; saved evidence is shown where available.",
+        );
+      }
+      if (saved && (saved.pathScopeVersion === 2 || !summary)) {
+        if (saved.pathScopeVersion !== 2) {
+          checkpointComplete = false;
+          comparisonComplete = false;
+          model.notices.push(
+            "This older saved checkpoint may omit outside-folder changes; the host comparison has expired. Recorded tool edits are still shown.",
+          );
+        }
         const bytes = JSON.stringify(saved).length;
         if (
           previewBytes + bytes > 4000000 ||
@@ -289,7 +343,6 @@ export async function readSessionReview(
         model.notices.push(...saved.notices);
         continue;
       }
-      const summary = services.workspaceChanges?.summary(sessionId, e.seq);
       if (!summary) {
         model.notices.push(
           "A turn comparison is no longer available from DSH. Recorded file edits remain available.",
@@ -307,46 +360,65 @@ export async function readSessionReview(
       };
       if (summary.files.length > 100) {
         checkpointComplete = false;
+        comparisonComplete = false;
         model.notices.push("Turn comparison file limit reached.");
       }
       for (let i = 0; i < Math.min(summary.files.length, 100); i++) {
         if (model.hunks.length >= 1000 || previewBytes > 4000000) {
           checkpointComplete = false;
+          comparisonComplete = false;
           model.notices.push("Turn comparison preview limit reached.");
           break;
         }
-        const diff = await services.workspaceChanges.diff(
-          sessionId,
-          e.seq,
-          i,
-          signal ?? new AbortController().signal,
-        );
+        let diff;
+        try {
+          diff = await services.workspaceChanges.diff(
+            sessionId,
+            e.seq,
+            i,
+            signal ?? new AbortController().signal,
+          );
+        } catch {
+          model.notices.push(
+            "The host comparison became unavailable during recovery.",
+          );
+        }
         if (signal?.aborted) throw Error("Request cancelled");
         if (!diff) {
           checkpointComplete = false;
+          comparisonComplete = false;
           model.notices.push("A host file comparison is unavailable.");
           continue;
         }
-        const path = diff.path;
-        if (isAbsolute(path) || path === ".." || path.startsWith("../"))
+        const location = sessionPath(diff.path, cwd, root);
+        if (!location) {
+          checkpointComplete = false;
+          comparisonComplete = false;
+          model.notices.push(
+            "A checkpoint with an invalid recorded path was omitted.",
+          );
           continue;
-        model.files.push({ id: path, path, kind: diff.kind });
+        }
+        const { path } = location;
+        model.files.push({ id: path, ...location, kind: diff.kind });
         if (diff.kind !== "text") continue;
         previewBytes += JSON.stringify(diff).length;
         if (previewBytes > 4000000) {
           checkpointComplete = false;
+          comparisonComplete = false;
           model.notices.push("Turn comparison preview limit reached.");
           break;
         }
         for (const [j, p] of diff.hunks.entries()) {
           if (model.hunks.length >= 1000) {
             checkpointComplete = false;
+            comparisonComplete = false;
             model.notices.push("Turn comparison hunk limit reached.");
             break;
           }
           const h = {
             id: id(e) + ":" + i + ":" + j,
-            path,
+            ...location,
             title: path.split("/").at(-1),
             oldStart: p.oldStart,
             newStart: p.newStart,
@@ -361,7 +433,44 @@ export async function readSessionReview(
           event.hunkIds.push(h.id);
         }
       }
+      if (!comparisonComplete && saved) {
+        for (const h of saved.hunks) {
+          if (model.hunks.some((x) => x.id === h.id)) continue;
+          const size = JSON.stringify(h).length;
+          if (model.hunks.length >= 1000 || previewBytes + size > 4000000)
+            break;
+          previewBytes += size;
+          attach({ ...h }, e, undefined);
+          event.hunkIds.push(h.id);
+        }
+        for (const f of saved.files)
+          if (!model.files.some((x) => x.path === f.path)) model.files.push(f);
+      }
       model.events.push(event);
+      if (comparisonComplete && !signal?.aborted && services.writeCheckpoint) {
+        const hunks = model.hunks.slice(hunkStart);
+        try {
+          await services.writeCheckpoint(sessionId, e.seq, {
+            sessionId,
+            seq: e.seq,
+            pathScopeVersion: 2,
+            event,
+            hunks,
+            files: model.files.slice(fileStart),
+            relationships: model.relationships.filter((r) =>
+              hunks.some((h) => h.id === r.hunkId),
+            ),
+            notices: [
+              "Saved host checkpoint; concurrent edits may come from elsewhere.",
+            ],
+            capturedAt: Date.now(),
+          });
+        } catch {
+          model.notices.push(
+            "Recovered checkpoint evidence could not be saved; it may expire with the host.",
+          );
+        }
+      }
       model.notices.push(
         "Turn checkpoints include workspace changes during the turn; concurrent edits may come from elsewhere.",
       );
@@ -375,8 +484,11 @@ export async function readSessionReview(
   model.title = model.objectives.at(-1)?.title ?? "Session review";
   model.activity =
     raw.at(-1)?.type === "turn/end" ? "Idle" : "Observed history";
+  model.notices.push(
+    "Session evidence includes recorded edits across folders and worktrees. Shell edits without host diff evidence may be unavailable.",
+  );
   model.notices = [...new Set(model.notices)];
-  if (!model.hunks.length)
+  if (!model.hunks.length && !model.files.length)
     model.notices.push(
       "No recorded file edits found. Switch to Workspace to inspect current Git changes without session attribution.",
     );

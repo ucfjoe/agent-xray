@@ -1,3 +1,4 @@
+import { pathLabel } from "./paths.js";
 import { projectCheck, checksForHunk } from "../core/verification.js";
 import { impactFigure, traceFigure, layoutGraph } from "./figures.js";
 import { projectReview, newestFirst } from "../core/model.js";
@@ -9,11 +10,11 @@ const delta = (h) =>
   `<span class="delta"><span>+${h.added ?? 0}</span><span>−${h.deleted ?? 0}</span></span>`;
 const button = (id, title, body, cls = "") =>
   `<button class="${cls}" data-select="${e(id)}" title="${e(title)}">${body}</button>`;
-function fileRow(h, state, narrative = false) {
+function fileRow(h, state, narrative = false, paths = []) {
   return button(
     h.id,
     h.path,
-    `<span class="file-icon">${/test|spec/.test(h.path) ? "✓" : "⌘"}</span><span class="file-label"><strong>${e(narrative ? (h.title ?? basename(h.path)) : basename(h.path))}</strong><small>${e(narrative ? basename(h.path) : (h.symbol ?? dir(h.path)))}</small></span>${delta(h)}`,
+    `<span class="file-icon">${/test|spec/.test(h.path) ? "✓" : "⌘"}</span><span class="file-label"><strong>${e(narrative ? (h.title ?? basename(h.path)) : basename(h.path))}</strong><small>${e(narrative ? pathLabel(h.path, paths) : [h.symbol, dir(pathLabel(h.path, paths))].filter(Boolean).join(" · "))}</small></span>${delta(h)}`,
     `file-row ${narrative ? "narrative" : ""} ${state.selected === h.id ? "selected" : ""}`,
   );
 }
@@ -31,7 +32,16 @@ function story(snapshot, p, state) {
     p.groups
       .map(
         (g, i) =>
-          `<section class="story-group"><div class="story-title"><span class="step-number">${String(i + 1).padStart(2, "0")}</span><div><h2>${e(g.name === "Not yet linked" ? "Changes awaiting context" : g.name)}</h2><p>${new Set(g.hunks.map((h) => h.path)).size} files · ${g.hunks.length} changes</p></div></div><div class="story-files">${g.hunks.map((h) => fileRow(h, state, true)).join("")}</div></section>`,
+          `<section class="story-group"><div class="story-title"><span class="step-number">${String(i + 1).padStart(2, "0")}</span><div><h2>${e(g.name === "Not yet linked" ? "Changes awaiting context" : g.name)}</h2><p>${new Set(g.hunks.map((h) => h.path)).size} files · ${g.hunks.length} changes</p></div></div><div class="story-files">${g.hunks
+            .map((h) =>
+              fileRow(
+                h,
+                state,
+                true,
+                p.hunks.map((h) => h.path),
+              ),
+            )
+            .join("")}</div></section>`,
       )
       .join("")
   );
@@ -54,7 +64,16 @@ function explorer(p, state) {
       ? p.groups
           .map(
             (g) =>
-              `<details class="file-group" open><summary>${e(g.name)} <span>${g.hunks.length}</span></summary>${g.hunks.map((h) => fileRow(h, state)).join("")}</details>`,
+              `<details class="file-group" open><summary>${e(g.name)} <span>${g.hunks.length}</span></summary>${g.hunks
+                .map((h) =>
+                  fileRow(
+                    h,
+                    state,
+                    false,
+                    p.hunks.map((h) => h.path),
+                  ),
+                )
+                .join("")}</details>`,
           )
           .join("")
       : empty("No matching changes", "Try another search or objective."))
@@ -79,7 +98,12 @@ function journey(snapshot, p, state) {
           return button(
             id,
             h.path,
-            e(basename(h.path)),
+            e(
+              pathLabel(
+                h.path,
+                snapshot.hunks.map((h) => h.path),
+              ),
+            ),
             "event-link " + (state.selected === id ? "selected" : ""),
           );
         })
@@ -115,20 +139,30 @@ function map(snapshot, p, state) {
   const nodes = [
     ...new Set([...names, ...deps.flatMap((d) => [d.from, d.to])]),
   ].slice(0, 40);
-  const { positions, width, height } = layoutGraph(
-    nodes,
-    deps,
-    globalThis.innerWidth < 760,
+  // Match the map grid's actual available pane width.
+  const compact =
+    (globalThis.innerWidth < 760
+      ? globalThis.innerWidth
+      : globalThis.innerWidth - Math.max(300, globalThis.innerWidth * 0.4)) -
+      32 <
+    650;
+  const { positions, width, height, edges } = layoutGraph(nodes, deps, compact);
+  const selectedNodes = new Set(
+    nodes.filter((n) =>
+      p.hunks.some(
+        (h) =>
+          h.id === state.selected &&
+          ((relations.find((r) => r.hunkId === h.id)?.target ?? h.path) === n ||
+            (h.symbol && h.path + "::" + h.symbol === n)),
+      ),
+    ),
   );
-  const edges = deps.filter(
-    (d) => positions.has(d.from) && positions.has(d.to),
-  );
-  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
-    .map((d) => {
-      const a = positions.get(d.from),
-        b = positions.get(d.to);
-      return `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""}" d="${a.x === b.x ? `M${a.x + 115},${a.y + 66} C${a.x + 260},${a.y + 85} ${b.x + 260},${b.y - 20} ${b.x + 115},${b.y}` : `M${a.x + 230},${a.y + 33} C${a.x + 250},${a.y + 33} ${b.x - 20},${b.y + 33} ${b.x},${b.y + 33}`}" marker-end="url(#arrow)"/>`;
-    })
+  const incident = (d) => selectedNodes.has(d.from) || selectedNodes.has(d.to);
+  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%;min-width:${Math.round((width * 0.92 * (state.mapZoom ?? 100)) / 100)}px${compact ? `;max-width:${(390 * (state.mapZoom ?? 100)) / 100}px` : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker><marker id="arrow-selected" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="selected-arrow" d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
+    .map(
+      (d) =>
+        `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""} ${incident(d) ? "selected" : ""}" d="${d.path}" marker-end="url(#${incident(d) ? "arrow-selected" : "arrow"})"><title>${e(d.from)} ${d.kind === "containment" ? "contains" : "depends on"} ${e(d.to)}</title></path>`,
+    )
     .join("")}${nodes
     .map((n) => {
       const pos = positions.get(n);
@@ -138,11 +172,20 @@ function map(snapshot, p, state) {
           (h.symbol && h.path + "::" + h.symbol === n),
       );
       const selected = hunks.some((h) => h.id === state.selected);
-      return `<g class="graph-node ${selected ? "selected" : ""}" ${hunks.length ? `data-select="${e(hunks[0].id)}" tabindex="0" role="button" aria-label="Inspect ${e(n)}"` : ""} transform="translate(${pos.x},${pos.y})"><rect width="230" height="66" rx="9"/><text x="14" y="26">${e(n.length > 28 ? "…" + n.slice(-27) : n)}</text><text class="node-subtitle" x="14" y="48">${hunks.length ? `${hunks.length} changes` : "Dependency"}</text></g>`;
+      return `<g class="graph-node ${selected ? "selected" : ""}" ${hunks.length ? `data-select="${e(hunks[0].id)}" tabindex="0" role="button" aria-label="Inspect ${e(n)}"` : ""} transform="translate(${pos.x},${pos.y})"><rect width="230" height="${pos.height}" rx="9"/><text x="14" y="26">${e(n.length > 28 ? "…" + n.slice(-27) : n)}</text><text class="node-subtitle" x="14" y="48">${hunks.length ? `${hunks.length} ${hunks.length === 1 ? "change" : "changes"}` : "Dependency"}</text></g>`;
     })
     .join(
       "",
-    )}</svg></div><p class="map-note">Solid edges: dependencies. Dashed edges: symbol containment. Up to 40 nodes; use the list for all changes. ${edges.length ? "Arrows show " + (snapshot.source === "demo" ? "illustrative" : "observed static") + " dependencies." : "No dependency edges available. Nodes show changed files or directory groups, not an inferred dependency graph."}</p><details class="map-list"><summary>Browse map as a list</summary>${p.hunks.map((h) => fileRow(h, state)).join("")}</details>`;
+    )}</svg></div><p class="map-note">A → B: A depends on B. Dashed edges: A contains B. Highlighted arrows connect the selected change. Up to 40 nodes; use the list for all changes. ${edges.length ? "Arrows show " + (snapshot.source === "demo" ? "illustrative" : "observed static") + " dependencies." : "No dependency edges available. Nodes show changed files or directory groups, not an inferred dependency graph."}</p><details class="map-list"><summary>Browse map as a list</summary>${p.hunks
+    .map((h) =>
+      fileRow(
+        h,
+        state,
+        false,
+        p.hunks.map((h) => h.path),
+      ),
+    )
+    .join("")}</details>`;
 }
 function empty(title, body) {
   return `<div class="empty"><span class="empty-symbol">◇</span><h2>${e(title)}</h2><p>${e(body)}</p></div>`;
@@ -194,7 +237,7 @@ export function render(
     map: () => map(snapshot, p, state),
     journey: () => journey(snapshot, p, state),
   };
-  return `<header class="app-header"><div class="brand"><span class="brand-mark">⌁</span><strong>Agent X-Ray</strong></div><div class="header-actions"><select id="source" aria-label="Review source"><option value="session" ${source === "session" ? "selected" : ""}>Session</option><option value="workspace" ${source === "workspace" ? "selected" : ""}>Workspace</option><option value="demo" ${source === "demo" ? "selected" : ""}>Examples</option></select><button data-action="refresh" class="icon-button" aria-label="Refresh review">↻</button></div></header>${source === "demo" ? `<div class="demo-strip"><span>EXAMPLE</span><select id="scenario" aria-label="Example scenario">${scenarios.map((s) => `<option value="${e(s.id)}" ${s.id === scenario ? "selected" : ""}>${e(s.title)}</option>`).join("")}</select><small>Fictional data</small></div>` : ""}<section class="overview"><div class="eyebrow"><span>${source === "demo" ? "DESIGN SANDBOX" : snapshot.scope === "workspace" ? "WORKSPACE OVERVIEW" : "SESSION OVERVIEW"}</span><span class="activity"><i></i>${e(snapshot.activity ?? "Review")}</span></div><h1>${e(snapshot.goal ?? snapshot.title)}</h1><div class="summary-metrics"><span><b>${p.counts.files}</b> files</span><span><b>${p.counts.hunks}</b> changes</span><span><b>${p.counts.objectives}</b> objectives</span>${delta(p.counts)}</div>${snapshot.events.some((ev) => ev.type === "action") ? `<p class="action-progress">${snapshot.events.filter((ev) => ev.type === "action" && ev.status === "completed").length} of ${snapshot.events.filter((ev) => ev.type === "action").length} recorded actions completed · ${snapshot.events.filter((ev) => ev.status === "failed").length} failed</p>` : ""}</section>${error ? `<div class="notice error" role="alert">${e(error)}</div>` : ""}${pending ? `<button class="update-banner" data-action="catchup">New activity available <span>Catch up →</span></button>` : ""}<div class="view-bar" role="tablist" aria-label="Review views">${Object.keys(
+  return `<header class="app-header"><div class="brand"><span class="brand-mark">⌁</span><strong>Agent X-Ray</strong></div><div class="header-actions"><select id="source" aria-label="Review source"><option value="session" ${source === "session" ? "selected" : ""}>Session</option><option value="workspace" ${source === "workspace" ? "selected" : ""}>Workspace</option><option value="demo" ${source === "demo" ? "selected" : ""}>Examples</option></select><button data-action="refresh" class="icon-button" aria-label="Refresh review">↻</button></div></header>${source === "demo" ? `<div class="demo-strip"><span>EXAMPLE</span><select id="scenario" aria-label="Example scenario">${scenarios.map((s) => `<option value="${e(s.id)}" ${s.id === scenario ? "selected" : ""}>${e(s.title)}</option>`).join("")}</select><small>Fictional data</small></div>` : ""}<section class="overview"><div class="eyebrow"><span>${source === "demo" ? "DESIGN SANDBOX" : snapshot.scope === "workspace" ? "WORKSPACE OVERVIEW" : "SESSION OVERVIEW"}</span><span class="activity"><i></i>${e(snapshot.activity ?? "Review")}</span></div><h1>${e(snapshot.goal ?? snapshot.title)}</h1><div class="summary-metrics"><span><b>${p.counts.files}</b> files</span><span><b>${p.counts.hunks}</b> changes</span><span><b>${p.counts.objectives}</b> objectives</span>${delta(p.counts)}</div>${snapshot.events.some((ev) => ev.type === "action") ? `<p class="action-progress">${snapshot.events.filter((ev) => ev.type === "action" && ev.status === "completed").length} of ${snapshot.events.filter((ev) => ev.type === "action").length} recorded actions completed · ${snapshot.events.filter((ev) => ev.status === "failed").length} failed</p>` : ""}${source === "session" ? '<p class="scope-summary">Recorded edits across folders · some shell changes may be unavailable.</p>' : source === "workspace" ? '<p class="scope-summary">Current Git changes in the opened repository · includes edits outside this session.</p>' : ""}</section>${error ? `<div class="notice error" role="alert">${e(error)}</div>` : ""}${pending ? `<button class="update-banner" data-action="catchup">New activity available <span>Catch up →</span></button>` : ""}<div class="view-bar" role="tablist" aria-label="Review views">${Object.keys(
     views,
   )
     .map(
@@ -237,5 +280,5 @@ export function render(
           )
           .join("")}</details>`
       : ""
-  }<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Recorded session evidence"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p>${(snapshot.diagnostics ?? []).map((d) => `<p>${e(d.path)}: ${e(d.reason)}</p>`).join("")}</details></footer>`;
+  }<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Session edits across folders"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p>${(snapshot.diagnostics ?? []).map((d) => `<p>${e(d.path)}: ${e(d.reason)}</p>`).join("")}</details></footer>`;
 }

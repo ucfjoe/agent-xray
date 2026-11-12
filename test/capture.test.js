@@ -204,7 +204,13 @@ test("checkpoint capture has its own budget and retains binary-only files", asyn
       type: "workspace/changes",
     });
     assert.deepEqual((await store.getCheckpoint("a", 3)).files, [
-      { id: "image.png", path: "image.png", kind: "binary" },
+      {
+        id: "image.png",
+        path: "image.png",
+        rawPath: "image.png",
+        locationScope: "workspace",
+        kind: "binary",
+      },
     ]);
   } finally {
     await rm(root, { recursive: true, force: true });

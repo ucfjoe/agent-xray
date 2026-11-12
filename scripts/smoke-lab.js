@@ -62,7 +62,23 @@ try {
       const review = await response.json();
       assert.equal(response.status, 200, JSON.stringify(review));
       assert.equal(review.sessionId, id);
-      assert.equal(review.hunks.length, 1);
+      assert.equal(review.hunks.length, 3);
+      const suffix = id.endsWith("a") ? "a" : "b";
+      assert.ok(
+        review.hunks.some((h) =>
+          h.path.endsWith("/other-repo-" + suffix + "/greet.js"),
+        ),
+      );
+      assert.ok(
+        review.hunks.some((h) =>
+          h.path.endsWith("/worktree-" + suffix + "/greet.js"),
+        ),
+      );
+      assert.equal(
+        review.hunks.filter((h) => h.locationScope === "outside-workspace")
+          .length,
+        2,
+      );
       assert.equal(review.objectives.length, 1);
       reviews.push(review);
     }

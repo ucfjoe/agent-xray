@@ -32,7 +32,13 @@ export function normalizeSnapshot(input = {}) {
     ...snapshot.files.map((f) => ({ ...f, id: f.id ?? f.path })),
     ...snapshot.hunks
       .filter((h) => !snapshot.files.some((f) => f.path === h.path))
-      .map((h) => ({ id: h.path, path: h.path })),
+      .map((h) => ({
+        id: h.path,
+        path: h.path,
+        ...(h.rawPath !== undefined
+          ? { rawPath: h.rawPath, locationScope: h.locationScope }
+          : {}),
+      })),
   ]);
   for (const h of snapshot.hunks) {
     h.lines ??= [];

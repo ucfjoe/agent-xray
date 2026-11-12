@@ -27,6 +27,7 @@ export async function captureReview({
     await store.putCheckpoint(sessionId, seq, {
       sessionId,
       seq,
+      pathScopeVersion: 2,
       event,
       hunks,
       files: snapshot.files,

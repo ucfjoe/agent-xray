@@ -67,10 +67,31 @@ for (const scheme of ["light", "dark"])
         path: `test-results/preview-${scheme}-${width}.png`,
         fullPage: true,
       });
-      if (width === 1440) {
-        await page.getByRole("tab", { name: "Map", exact: true }).click();
+      for (const view of ["Story", "Changes", "Map", "Journey"]) {
+        await page.getByRole("tab", { name: view, exact: true }).click();
+        if (view === "Map") {
+          const fontSize = await page
+            .locator(".graph-node text")
+            .first()
+            .evaluate(
+              (t) =>
+                parseFloat(getComputedStyle(t).fontSize) *
+                Math.hypot(t.getScreenCTM().a, t.getScreenCTM().b),
+            );
+          expect(fontSize).toBeGreaterThanOrEqual(10);
+        }
+        if (view === "Map" && width === 900)
+          await expect(page.locator(".graph")).toHaveAttribute(
+            "viewBox",
+            /^0 0 3[0-9]{2} /,
+          );
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
         await page.screenshot({
-          path: `test-results/map-${scheme}.png`,
+          path: `test-results/audit-${scheme}-${width}-${view.toLowerCase()}.png`,
           fullPage: true,
         });
       }
@@ -245,10 +266,35 @@ test("figures show real relationships and drive the shared selection", async ({
   expect(edge.length).toBeGreaterThan(0);
   expect(edge.stroke).not.toBe("none");
   expect(Number(edge.opacity)).toBeGreaterThan(0);
+  for (const name of [
+    "Auth tests",
+    "Login API",
+    "Route middleware",
+    "Session service",
+  ]) {
+    await page
+      .getByRole("button", { name: "Inspect " + name, exact: true })
+      .click();
+    const labels = await page
+      .locator(".graph-edge.selected title")
+      .allTextContents();
+    expect(labels).toHaveLength(2);
+    expect(
+      labels.every(
+        (label) =>
+          label.startsWith(name + " depends on ") ||
+          label.endsWith(" depends on " + name),
+      ),
+    ).toBe(true);
+  }
   await page.getByLabel("Zoom in").click();
-  await expect(page.locator(".graph")).toHaveAttribute("style", "width:120%");
+  expect(
+    await page.locator(".graph").evaluate((node) => node.style.width),
+  ).toBe("120%");
   await page.getByRole("button", { name: "Fit map", exact: true }).click();
-  await expect(page.locator(".graph")).toHaveAttribute("style", "width:100%");
+  expect(
+    await page.locator(".graph").evaluate((node) => node.style.width),
+  ).toBe("100%");
   await page.screenshot({
     path: "test-results/diagrams-expanded.png",
     fullPage: true,
@@ -319,6 +365,76 @@ test("live command context stays unverified in both diagram and inspector", asyn
   await expect(page.locator(".badge.passed")).toHaveCount(0);
   await page.screenshot({
     path: "test-results/contextual-evidence.png",
+    fullPage: true,
+  });
+});
+
+test("cross-folder session edits stay distinguishable in narrow and expanded views", async ({
+  page,
+}) => {
+  const paths = [
+    "src/shared.ts",
+    "/repos/another-app/src/shared.ts",
+    "/worktrees/fix/src/shared.ts",
+  ];
+  await page.route("**/agent-xray/review?**", (route) =>
+    route.fulfill({
+      json: {
+        source: "live",
+        scope: "session",
+        sessionId: "cross",
+        snapshotId: "cross-1",
+        title: "Review changes across repositories",
+        hunks: paths.map((path, i) => ({
+          id: "h" + i,
+          path,
+          eventId: "e" + i,
+          lines: ["-old", "+new"],
+          rangeKind: "excerpt",
+        })),
+        events: paths.map((path, i) => ({
+          id: "e" + i,
+          seq: i,
+          type: "action",
+          title: "Edit " + path,
+          hunkIds: ["h" + i],
+        })),
+        files: [],
+        checks: [],
+        objectives: [],
+        relationships: [],
+        notices: [],
+      },
+    }),
+  );
+  for (const width of [380, 900, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/?live=1&session=cross");
+    await expect(page.locator(".file-row")).toHaveCount(3);
+    await expect(page.locator(".file-row").first()).toContainText(
+      "…/fix/src/shared.ts",
+    );
+    await page.getByRole("tab", { name: "Journey", exact: true }).click();
+    await expect(page.locator(".event-link").first()).toHaveText(
+      "…/fix/src/shared.ts",
+    );
+    await page.locator(".event-link").first().click();
+    await expect(page.locator(".inspector-title")).toContainText(
+      "/worktrees/fix/src",
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.getByRole("tab", { name: "Story", exact: true }).click();
+    await page.screenshot({
+      path: `test-results/cross-folder-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await page.screenshot({
+    path: "test-results/cross-folder-session.png",
     fullPage: true,
   });
 });

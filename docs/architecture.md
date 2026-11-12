@@ -27,3 +27,5 @@ Examples pass through the same model with explicit demo provenance and never bec
 ## Support boundaries
 
 Supported host contract: DSH 0.2.0-rc.2. Workspace preview: first 100 files, 512 KB source preview per file, 4 MiB Git command output, 10-second Git command timeout. Map rendering: first 40 nodes with a list alternative. Historical retention consumes local disk; there is no automatic deletion policy in this version. Generic commands lack a reliably established tested-snapshot relation, so exact test attribution stays unknown unless supplied by evidence.
+
+Session paths are projected lexically by `plugin/session-path.js`: known cwd aliases stay relative; external paths remain absolute identities with original recorded paths retained. External evidence contents come from DSH; the plugin does not read or scan those paths. `recover-session.js` adds same-boundary replay evidence to display clones of old caches. Versioned checkpoint sidecars retain recovered outside-folder comparisons without replacing legacy records. Workspace Git scope remains unchanged.

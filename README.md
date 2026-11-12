@@ -23,7 +23,7 @@ Browser checks: `npx playwright install --with-deps chromium`, then `npm run tes
 
 ## Evidence boundaries
 
-- Session scope comes from the native sidebar's session identity and DSH's validated history. It does not read one global test repository for every session.
+- Session scope follows recorded edits across folders, repositories and worktrees using the native session identity and DSH history. Workspace mode remains the opened repository's current Git view. Shell writes without host diff evidence may be unavailable.
 - File-tool results preserve recorded excerpts. DSH does not provide their original line offsets, so the UI labels them as excerpts and does not invent numbers.
 - DSH per-turn comparisons carry exact ranges, but may include concurrent workspace edits. Current workspace changes also do not establish authorship.
 - Static import/symbol analysis supports JavaScript/TypeScript. Other languages retain file navigation and explicit diagnostics. Only inspected changed sources contribute dependency edges.
