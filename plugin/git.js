@@ -16,9 +16,9 @@ export function parseDiff(diff) {
     if (hunk) {
       current = {
         path, oldLine: Number(hunk[1]), newLine: Number(hunk[2]), lines: [],
-        task: "Unattributed changes", capability: "Unclassified", module: path.includes("/") ? path.split("/")[0] : "Repository root",
-        risk: "Unassessed", milestone: "Working tree",
-        story: path + (hunk[3].trim() ? " · " + hunk[3].trim() : ""),
+        task: null, capability: null, module: path.includes("/") ? path.split("/")[0] : "Repository root",
+        risk: null, milestone: "Working tree",
+        story: path,
         action: "Event attribution unavailable",
         evidence: "Observed Git diff against HEAD in the configured test repository. Agent attribution unavailable.",
         verification: "Verification evidence unavailable.",

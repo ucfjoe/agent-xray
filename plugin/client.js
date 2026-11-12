@@ -3,7 +3,7 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require("react");
 
-    function Panel() {
+    function Panel({ sessionId }) {
       const frame = React.useRef(null);
       const syncTheme = React.useCallback(() => {
         const target = frame.current?.contentDocument?.documentElement;
@@ -35,7 +35,7 @@ window.__ModuleLoader__.load({
       return React.createElement("iframe", {
         ref: frame,
         title: "Agent X-Ray",
-        src: "/agent-xray/index.html?live=1",
+        src: "/agent-xray/index.html?live=1&session=" + encodeURIComponent(sessionId),
         onLoad: syncTheme,
         style: { display: "block", width: "100%", height: "100%", minHeight: 0, border: 0 },
       });
@@ -57,10 +57,10 @@ window.__ModuleLoader__.load({
             description: () => "Inspect code changes and their context",
           }],
         }), "agent-xray: sidebar type");
-        inner.effect(() => slots.inject("sidebar.right.pane.tab", () => slots.register({
+        inner.effect(() => slots.inject("sidebar.right.pane.tab", (sessionId) => slots.register({
           name: "sidebar.right.pane.tab",
           key: "dsh-agent-xray",
-        }, Panel)), "agent-xray: sidebar body");
+        }, () => React.createElement(Panel, { sessionId }))), "agent-xray: sidebar body");
       });
     }
     return { apply };
