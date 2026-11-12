@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent X-Ray</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="app.js"></script>
+</head>
+<body>
+<main id="workspace" data-mode="side">
+  <aside id="host"><strong>Agent session</strong><p>Secure authentication</p><small>Sample session</small></aside>
+  <section id="panel" aria-label="Agent X-Ray">
+    <header><h1>Agent X-Ray</h1><div id="modes" aria-label="Display mode">
+      <button data-mode="side" aria-pressed="true">Side</button><button data-mode="split" aria-pressed="false">Split</button><button data-mode="max" aria-pressed="false">Max</button>
+    </div></header>
+    <label>Mission Control <select id="task"></select></label>
+    <nav aria-label="Inspection views" id="views">
+      <button data-view="story" aria-pressed="true">Change Story</button>
+      <button data-view="changes" aria-pressed="false">Change Explorer</button>
+      <button data-view="map" aria-pressed="false">Architecture Map</button>
+      <button data-view="journey" aria-pressed="false">Journey</button>
+    </nav>
+    <div id="inspection">
+      <section id="navigation" aria-label="Changes"></section>
+      <section id="detail" aria-labelledby="path">
+        <h2 id="path"></h2>
+        <p id="evidence"></p>
+        <p id="verification"></p>
+        <label>Diff layout <select id="layout"><option value="unified">Unified</option><option value="split">Side by side</option></select></label>
+        <div id="diff"></div>
+      </section>
+    </div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,35 @@
+:root { color-scheme: dark; font: 16px/1.5 "Inter", system-ui, sans-serif; background: #111518; color: #e8eeef; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+#workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 490px); min-height: 100vh; }
+#workspace[data-mode="split"] { grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr); }
+#workspace[data-mode="max"] { grid-template-columns: minmax(0, 1fr); }
+[data-mode="max"] #host { display: none; }
+#host, #panel { padding: clamp(16px, 3vw, 34px); }
+#host { color: #a3b5bc; background: #171e22; }
+header, nav, #modes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+header { justify-content: space-between; margin-bottom: 18px; }
+h1, h2, p { margin: 0 0 10px; }
+h1 { font-size: 1.45rem; }
+h2 { font-size: 1rem; overflow-wrap: anywhere; }
+nav { margin: 20px 0; }
+button, select { font: inherit; background: #232e34; color: inherit; border: 1px solid #46565e; border-radius: 6px; padding: 5px 9px; }
+button { cursor: pointer; }
+button[aria-pressed="true"] { background: #183e39; border-color: #72cbb8; }
+button:focus-visible, select:focus-visible { outline: 2px solid #a7eedf; outline-offset: 2px; }
+#inspection { display: grid; gap: 16px; }
+[data-mode="max"] #inspection { grid-template-columns: minmax(210px, 1fr) minmax(0, 3fr); }
+#navigation, #detail { padding: 14px; background: #1b2429; border: 1px solid #38484f; border-radius: 8px; min-width: 0; }
+#navigation ul { list-style: none; padding: 0; margin: 10px 0; }
+#navigation li + li { margin-top: 7px; }
+#navigation li button { text-align: left; width: 100%; overflow-wrap: anywhere; }
+#verification, #evidence { color: #b2c5ca; }
+#diff { margin-top: 12px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+pre { margin: 0; padding: 10px; background: #111518; overflow: auto; font: 13px/1.55 "IBM Plex Mono", monospace; }
+pre span { display: block; min-width: max-content; }
+.added { background: #16372c; color: #a2ead0; }
+.removed { background: #40292e; color: #ffc1c8; }
+@media (max-width: 750px) {
+  #workspace, #workspace[data-mode="split"], [data-mode="max"] #inspection { grid-template-columns: minmax(0, 1fr); }
+  #host { display: none; }
+}
