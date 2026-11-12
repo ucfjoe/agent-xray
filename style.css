@@ -33,3 +33,4 @@ pre span { display: block; min-width: max-content; }
   #workspace, #workspace[data-mode="split"], [data-mode="max"] #inspection { grid-template-columns: minmax(0, 1fr); }
   #host { display: none; }
 }
+[hidden] { display: none !important; }

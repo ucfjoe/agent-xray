@@ -1,0 +1,20 @@
+name: DSH plugin lab
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
+      - run: npm install --global @deepseek-ai/dsh@0.2.0-rc.2
+      - run: npm run lab:setup
+      - run: node scripts/smoke-lab.js

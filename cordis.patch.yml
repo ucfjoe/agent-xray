@@ -1,0 +1,3 @@
+- insert:
+    - id: agent-xray
+      name: dsh-agent-xray

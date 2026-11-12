@@ -24,3 +24,9 @@ Store relationship evidence separately from the diff. Identify user requests, ag
 4. Feed a read-only review model to the panel. Keep workspace selection and filters local to the UI.
 
 The browser demo implements the review model with static sample data. Host API compatibility, live event capture, and dependency discovery remain open.
+
+## First DSH integration
+
+The first adapter registers a conversation tab through the DSH slot service and serves the existing review UI in an iframe. Host routes use Connection admission checks. The lab supplies a fixed repository through XRAY_TEST_REPOSITORY. A refresh reads actual Git hunks against HEAD.
+
+This establishes plugin loading, authenticated host access, and Git inspection. Session-to-workspace resolution and agent event collection are still pending. Every session tab currently inspects the configured test repository. Codespaces supplies the proposed interactive cloud environment, with GitHub Actions exercising a real DSH process on Ubuntu.
