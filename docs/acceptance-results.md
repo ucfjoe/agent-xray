@@ -39,3 +39,15 @@ No model API key is configured in the cloud lab, so a credentialed end-to-end mo
 ## Implementation decisions
 
 The existing task checkout was reused on a new feature branch. DSH's recorded file edits and per-turn comparisons were preferred over guessed authorship from Git timing. Visuals were built and inspected through the real UI, not represented by fabricated screenshots. Historical excerpts use an explicit non-numbered mode; command evidence uses conservative unknown attribution. Session previews and graphs are bounded with notices, and historical metadata is indexed separately to avoid reloading all code on each poll. Browser automation runs only in the cloud. A testable package and draft PR are delivered before replacing a user's running installation.
+
+## Evidence and history follow-up
+
+Live command evidence now has one shared projection in the inspector, diagram and command list. Review identities are explicitly distinct from tested content. Legacy success labels, output text, and hunk links cannot establish passing tests. Tool failures remain visible separately. Examples retain explicitly illustrative results.
+
+Background captures retain their triggering event sequence rather than debouncing into a later turn. Exact host checkpoints are saved separately under session-scoped immutable checkpoint files; original aggregates and their IDs remain unchanged. Each checkpoint has an independent preview budget, including file-only changes. Partial host results are not published as complete checkpoints. Read-time enrichment adds missing saved evidence without rewriting history. Authorized historical reads validate the DSH session but do not require its former workspace directory.
+
+The worker holds at most 32 queued captures, has a 10-second per-job deadline, cancels on disposal, and exposes failure notices. Captures remain best effort: an expired host comparison cannot be invented, and an overloaded queue may miss a checkpoint. No new raw output/environment capture, workspace copying, parser dependencies or test execution is introduced. Existing history is never automatically deleted; a retention policy remains future work.
+
+Independent evidence/history reviews identified aggregate-budget starvation, dropped file-only records and stalled capture starvation. Regression tests cover each fix, plus partial comparisons, late host completion, unchanged legacy snapshots and removed-workspace reads.
+
+Follow-up validation: 37 unit/integration tests and 16 cloud browser tests pass. Native DSH sidebar/session/lifecycle checks, authenticated fixture smoke tests, and production 0.2.1 package installation/import pass. `docs/previews/contextual-evidence.png` shows a controlled mocked live response, not a credentialed model run. The new automated history regressions use controlled host services to exercise expiry, stalls and deleted workspaces; they do not claim an actual long-lived model session has been tested.

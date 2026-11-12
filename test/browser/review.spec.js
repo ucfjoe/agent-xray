@@ -234,11 +234,14 @@ test("figures show real relationships and drive the shared selection", async ({
   await page.getByRole("tab", { name: "Map", exact: true }).click();
   // Horizontal SVG paths have a zero-height geometry box, even when painted.
   await expect(page.locator(".graph")).toBeVisible();
-  const edge = await page.locator(".graph-edge").first().evaluate((node) => ({
-    length: node.getTotalLength(),
-    stroke: getComputedStyle(node).stroke,
-    opacity: getComputedStyle(node).opacity,
-  }));
+  const edge = await page
+    .locator(".graph-edge")
+    .first()
+    .evaluate((node) => ({
+      length: node.getTotalLength(),
+      stroke: getComputedStyle(node).stroke,
+      opacity: getComputedStyle(node).opacity,
+    }));
   expect(edge.length).toBeGreaterThan(0);
   expect(edge.stroke).not.toBe("none");
   expect(Number(edge.opacity)).toBeGreaterThan(0);
@@ -256,6 +259,66 @@ test("figures show real relationships and drive the shared selection", async ({
   await expect(page.locator(".trace-figure")).toBeVisible();
   await page.screenshot({
     path: "test-results/diagrams-sidebar.png",
+    fullPage: true,
+  });
+});
+
+test("live command context stays unverified in both diagram and inspector", async ({
+  page,
+}) => {
+  await page.route("**/agent-xray/review?**", (route) =>
+    route.fulfill({
+      json: {
+        source: "live",
+        scope: "session",
+        sessionId: "safe",
+        snapshotId: "review-1",
+        title: "Review a recorded edit",
+        events: [
+          {
+            id: "e",
+            seq: 1,
+            title: "Run command and edit file",
+            type: "action",
+            status: "completed",
+          },
+        ],
+        hunks: [
+          {
+            id: "h",
+            path: "src/example.ts",
+            eventId: "e",
+            oldStart: 3,
+            newStart: 3,
+            rangeKind: "file",
+            lines: ["-old", "+new"],
+          },
+        ],
+        checks: [
+          {
+            id: "c",
+            eventId: "e",
+            status: "passed",
+            command: "npm test",
+            output: "All tests passed",
+            snapshotId: "review-1",
+          },
+        ],
+        objectives: [],
+        relationships: [],
+        files: [],
+        notices: [],
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto("/?live=1&session=safe");
+  await page.locator(".file-row").click();
+  await expect(page.locator(".trace-figure")).toContainText("Not verified");
+  await expect(page.locator(".inspector .check")).toContainText("not verified");
+  await expect(page.locator(".badge.passed")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/contextual-evidence.png",
     fullPage: true,
   });
 });

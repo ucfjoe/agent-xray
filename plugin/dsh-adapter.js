@@ -20,13 +20,14 @@ const clean = (s) =>
 export async function readSessionReview(
   services,
   sessionId,
-  { throughSeq = Infinity, signal } = {},
+  { throughSeq = Infinity, signal, checkpointSeq } = {},
 ) {
   if (!sessionId || !services.sessionQuery)
     throw Error(
       "Select a session with history support to inspect its changes.",
     );
   const log = await services.sessionQuery.readSession(sessionId);
+  if (signal?.aborted) throw Error("Request cancelled");
   if (log.session.id !== sessionId) throw Error("Session identity mismatch");
   const cwd = log.session.cwd;
   if (!cwd || !isAbsolute(cwd))
@@ -47,6 +48,11 @@ export async function readSessionReview(
     workspaceId: digest(root),
     root,
     snapshotId,
+    identity: {
+      kind: "review-history",
+      throughSeq: raw.at(-1)?.seq ?? -1,
+      testedContent: "unknown",
+    },
     title: "Session review",
     scope: "session",
     capturedAt: raw.at(-1)?.time ?? Date.now(),
@@ -57,6 +63,10 @@ export async function readSessionReview(
     checks: [],
     notices: [],
     milestones: [],
+    checkpointSeqs: raw
+      .slice(-10000)
+      .filter((e) => e.type === "workspace/changes")
+      .map((e) => e.seq),
     files: [],
   };
   const calls = new Map();
@@ -95,11 +105,14 @@ export async function readSessionReview(
     });
   }
   let previewBytes = 0;
+  let checkpointComplete = true;
   if (raw.length > 10000)
     model.notices.push(
       "Showing the latest 10,000 history events. Earlier activity is omitted from this preview.",
     );
-  for (const e of raw.slice(-10000)) {
+  for (const e of checkpointSeq === undefined
+    ? raw.slice(-10000)
+    : raw.filter((e) => e.seq === checkpointSeq)) {
     if (signal?.aborted) throw Error("Request cancelled");
     const d = e.data ?? {};
     if (e.type === "turn/start") {
@@ -239,6 +252,9 @@ export async function readSessionReview(
           command: clean(call.args.command),
           output,
           status: d.message?.isError ? "failed" : "recorded",
+          toolOutcome: d.message?.isError ? "failed" : "unknown",
+          testOutcome: "unknown",
+          binding: "unlinked",
           provenance: "observed",
           snapshotId,
           seq: e.seq,
@@ -248,8 +264,32 @@ export async function readSessionReview(
         });
       }
     }
-    if (e.type === "workspace/changes" && services.workspaceChanges) {
-      const summary = services.workspaceChanges.summary(sessionId, e.seq);
+    if (e.type === "workspace/changes") {
+      let saved;
+      try {
+        saved = await services.readCheckpoint?.(sessionId, e.seq);
+      } catch {
+        model.notices.push(
+          "A saved turn comparison could not be read; trying the host comparison.",
+        );
+      }
+      if (saved) {
+        const bytes = JSON.stringify(saved).length;
+        if (
+          previewBytes + bytes > 4000000 ||
+          model.hunks.length + saved.hunks.length > 1000
+        ) {
+          model.notices.push("Saved turn comparison preview limit reached.");
+          continue;
+        }
+        previewBytes += bytes;
+        for (const h of saved.hunks) attach({ ...h }, e, undefined);
+        model.files.push(...saved.files);
+        model.events.push(saved.event);
+        model.notices.push(...saved.notices);
+        continue;
+      }
+      const summary = services.workspaceChanges?.summary(sessionId, e.seq);
       if (!summary) {
         model.notices.push(
           "A turn comparison is no longer available from DSH. Recorded file edits remain available.",
@@ -265,8 +305,13 @@ export async function readSessionReview(
         hunkIds: [],
         objectiveId: objective?.id,
       };
+      if (summary.files.length > 100) {
+        checkpointComplete = false;
+        model.notices.push("Turn comparison file limit reached.");
+      }
       for (let i = 0; i < Math.min(summary.files.length, 100); i++) {
         if (model.hunks.length >= 1000 || previewBytes > 4000000) {
+          checkpointComplete = false;
           model.notices.push("Turn comparison preview limit reached.");
           break;
         }
@@ -276,7 +321,12 @@ export async function readSessionReview(
           i,
           signal ?? new AbortController().signal,
         );
-        if (!diff) continue;
+        if (signal?.aborted) throw Error("Request cancelled");
+        if (!diff) {
+          checkpointComplete = false;
+          model.notices.push("A host file comparison is unavailable.");
+          continue;
+        }
         const path = diff.path;
         if (isAbsolute(path) || path === ".." || path.startsWith("../"))
           continue;
@@ -284,10 +334,16 @@ export async function readSessionReview(
         if (diff.kind !== "text") continue;
         previewBytes += JSON.stringify(diff).length;
         if (previewBytes > 4000000) {
+          checkpointComplete = false;
           model.notices.push("Turn comparison preview limit reached.");
           break;
         }
         for (const [j, p] of diff.hunks.entries()) {
+          if (model.hunks.length >= 1000) {
+            checkpointComplete = false;
+            model.notices.push("Turn comparison hunk limit reached.");
+            break;
+          }
           const h = {
             id: id(e) + ":" + i + ":" + j,
             path,
@@ -311,6 +367,11 @@ export async function readSessionReview(
       );
     }
   }
+  model.capture = {
+    checkpointSeq: checkpointSeq ?? null,
+    scope: checkpointSeq === undefined ? "bounded-review" : "checkpoint",
+    complete: checkpointSeq === undefined ? null : checkpointComplete,
+  };
   model.title = model.objectives.at(-1)?.title ?? "Session review";
   model.activity =
     raw.at(-1)?.type === "turn/end" ? "Idle" : "Observed history";

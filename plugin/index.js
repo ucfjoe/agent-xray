@@ -1,9 +1,10 @@
+import { createCaptureQueue } from "./capture-queue.js";
+import { captureReview } from "./checkpoints.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readChanges } from "./git.js";
-import { readSessionReview } from "./dsh-adapter.js";
-import { readWorkspaceReview } from "./workspace.js";
+import { readReview } from "./review-service.js";
 import { createHistoryStore } from "./history-store.js";
 export const name = "agent-xray";
 export const inject = ["webServer"];
@@ -14,6 +15,7 @@ const assets = new Map(
     "examples.js",
     "style.css",
     "core/model.js",
+    "core/verification.js",
     "ui/state.js",
     "ui/render.js",
     "ui/diff.js",
@@ -41,27 +43,34 @@ export function apply(ctx) {
   const services = () => ({
     sessionQuery: ctx.get("sessionQuery"),
     workspaceChanges: ctx.get("workspaceChanges"),
+    readCheckpoint: (id, seq) => store.getCheckpoint(id, seq),
   });
-  const jobs = new Map();
-  // Capture only sessions producing changes; never block the host event dispatch.
+  const captureFailures = new Map();
+  const queue = createCaptureQueue({
+    capture: (sessionId, seq, type, signal) =>
+      captureReview({
+        services: services(),
+        store,
+        sessionId,
+        seq,
+        type,
+        signal,
+      }),
+    onError: (id, seq) => {
+      if (captureFailures.size >= 100 && !captureFailures.has(id))
+        captureFailures.delete(captureFailures.keys().next().value);
+      captureFailures.set(
+        id,
+        `Background history capture could not retain event ${seq}. Some exact historical ranges may be unavailable.`,
+      );
+    },
+  });
   if (typeof ctx.on === "function")
     ctx.on("session/event", (session, event) => {
-      if (!["workspace/changes", "turn/end"].includes(event.type)) return;
-      clearTimeout(jobs.get(session.id));
-      jobs.set(
-        session.id,
-        setTimeout(() => {
-          jobs.delete(session.id);
-          readSessionReview(services(), session.id)
-            .then((s) => store.put(s))
-            .catch(() => {});
-        }, 250),
-      );
+      if (["workspace/changes", "turn/end"].includes(event.type))
+        queue.enqueue(session.id, event.seq, event.type);
     });
-  ctx.effect(() => () => {
-    for (const timer of jobs.values()) clearTimeout(timer);
-    jobs.clear();
-  });
+  ctx.effect(() => () => queue.dispose());
   ctx.effect(
     () =>
       ctx.get("webServer").register({
@@ -96,41 +105,19 @@ export function apply(ctx) {
           try {
             if (url.pathname === "/agent-xray/review") {
               const sessionId = url.searchParams.get("session");
-              const current = await readSessionReview(services(), sessionId);
-              if (url.searchParams.get("scope") === "workspace") {
-                json(
-                  200,
-                  await readWorkspaceReview({
-                    sessionId,
-                    workspaceId: current.workspaceId,
-                    root: current.root,
-                  }),
-                );
-                return;
-              }
-              const retained = await store.get(sessionId, current.snapshotId);
-              await store.put(current);
-              const requested = url.searchParams.get("snapshot");
-              const snapshot = requested
-                ? await store.get(sessionId, requested)
-                : (retained ?? current);
-              if (!snapshot) {
-                json(404, {
-                  error: "This historical snapshot is unavailable.",
-                });
-                return;
-              }
-              const history = await store.list(sessionId);
-              json(200, {
-                ...snapshot,
-                history: history.map((s) => ({
-                  id: s.snapshotId,
-                  time: s.capturedAt,
-                  title: s.title,
-                  count: s.count,
-                })),
-                latestSnapshotId: current.snapshotId,
+              const result = await readReview({
+                services: services(),
+                store,
+                sessionId,
+                snapshotId: url.searchParams.get("snapshot"),
+                scope: url.searchParams.get("scope"),
               });
+              if (captureFailures.has(sessionId))
+                result.notices = [
+                  ...result.notices,
+                  captureFailures.get(sessionId),
+                ];
+              json(200, result);
               return;
             }
             // Explicit lab endpoint retained for smoke tests; normal panels never use it.
@@ -155,7 +142,9 @@ export function apply(ctx) {
             });
             res.end(content);
           } catch (error) {
-            json(503, { error: error.message });
+            json(error.statusCode === 404 ? 404 : 503, {
+              error: error.message,
+            });
           }
         },
       }),

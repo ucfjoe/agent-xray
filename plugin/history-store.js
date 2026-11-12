@@ -34,6 +34,36 @@ async function publish(path, value) {
 }
 export function createHistoryStore(root) {
   return {
+    async putCheckpoint(sessionId, seq, checkpoint) {
+      if (
+        checkpoint.sessionId !== sessionId ||
+        checkpoint.seq !== seq ||
+        !Number.isSafeInteger(seq)
+      )
+        throw Error("Checkpoint identity mismatch");
+      const dir = join(root, key(sessionId), "checkpoints");
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      return publish(join(dir, key(String(seq)) + ".json"), checkpoint);
+    },
+    async getCheckpoint(sessionId, seq) {
+      try {
+        const s = JSON.parse(
+          await readFile(
+            join(
+              root,
+              key(sessionId),
+              "checkpoints",
+              key(String(seq)) + ".json",
+            ),
+            "utf8",
+          ),
+        );
+        return s.sessionId === sessionId && s.seq === seq ? s : undefined;
+      } catch (e) {
+        if (e.code === "ENOENT") return undefined;
+        throw e;
+      }
+    },
     async put(snapshot) {
       const dir = join(root, key(snapshot.sessionId));
       await mkdir(dir, { recursive: true, mode: 0o700 });
