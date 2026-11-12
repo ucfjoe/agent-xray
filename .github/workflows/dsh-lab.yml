@@ -19,5 +19,5 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm install --global @deepseek-ai/dsh@0.2.0-rc.2
-      - run: npm run lab:setup
-      - run: node scripts/smoke-lab.js
+      - run: XRAY_FIXTURES=1 npm run lab:setup
+      - run: XRAY_FIXTURES=1 node scripts/smoke-lab.js
