@@ -122,7 +122,7 @@ function map(snapshot, p, state) {
   const edges = deps.filter(
     (d) => positions.has(d.from) && positions.has(d.to),
   );
-  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
+  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
     .map((d) => {
       const a = positions.get(d.from),
         b = positions.get(d.to);
