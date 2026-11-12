@@ -11,3 +11,8 @@ Inspected installed `@deepseek-ai/dsh` version 0.2.0-rc.2, matching the lab pin.
 - Authentication: existing `connection.admit(req)` protects routes. Session lookup is host-owned, filesystem roots come only from validated session headers. DSH is the trusted local single-user host; no new multi-user authorization model is implied.
 
 Read-only polling is used for the UI; host event notifications trigger bounded cache capture. Unknown service/version capability produces a visible unsupported state, never fixture data. Cloud contract validation is still required before marking this task complete.
+
+Cross-folder contract verified in installed 0.2.0-rc.2 implementation:
+- `dsh-workspace-changes/lib/index.js` `durablePathOf` emits cwd-relative paths inside the session and absolute paths outside. `capture` snapshots known file-tool mutations even outside cwd. Absolute checkpoint paths must not be filtered out.
+- `dsh-tool-fs/lib/index.js` successful `write` creation metadata uses `operation: create` with an empty diffs array; its presentation uses the call's `file_path` and `content`. X-Ray applies this fallback only to that successful, explicitly identified create contract.
+- Outside-repository Bash mutations without supplied diff evidence are not universally captured by this host service. Showing all recorded session evidence is not filesystem-wide change detection.

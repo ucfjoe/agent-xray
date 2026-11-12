@@ -51,3 +51,13 @@ The worker holds at most 32 queued captures, has a 10-second per-job deadline, c
 Independent evidence/history reviews identified aggregate-budget starvation, dropped file-only records and stalled capture starvation. Regression tests cover each fix, plus partial comparisons, late host completion, unchanged legacy snapshots and removed-workspace reads.
 
 Follow-up validation: 37 unit/integration tests and 16 cloud browser tests pass. Native DSH sidebar/session/lifecycle checks, authenticated fixture smoke tests, and production 0.2.1 package installation/import pass. `docs/previews/contextual-evidence.png` shows a controlled mocked live response, not a credentialed model run. The new automated history regressions use controlled host services to exercise expiry, stalls and deleted workspaces; they do not claim an actual long-lived model session has been tested.
+
+## Session scope correction (0.2.2)
+
+Session review now retains recorded edits and exact host checkpoints outside the opened folder, including other repositories and worktrees. Durable absolute paths remain distinct, while visible labels retain concise distinguishing directories. Empty successful creations are represented as file-only entries. This is display of supplied evidence, not filesystem scanning or a claim to detect arbitrary shell writes.
+
+Legacy aggregates remain immutable. Same-ID current views recover available omitted evidence additively; selected histories replay only through their saved sequence boundary. Versioned checkpoint supplements preserve recovered exact ranges after host expiry, leaving old records untouched. Failed host recovery falls back to saved evidence. Older histories lacking a replay boundary or whose host comparisons already expired cannot always recover omitted exact ranges.
+
+Three engineering experts reviewed host scope, path safety and cache/UI behavior. A separate visual cognition expert assessed the whole product; the report is in docs/reviews/2026-11-12-visual-cognition.md. Broader recommendations are explicitly separate from the three immediate visual fixes.
+
+Validation for 0.2.2: 46 unit/integration tests and 17 browser tests pass, including a 24-capture all-view/theme/width matrix and three cross-folder layouts. Native DSH fixture routes return edits from the opened folder plus a sibling repository and a worktree for each isolated test session. Native sidebar lifecycle checks and package installation/import pass. Screenshots are controlled fixtures, not evidence of arbitrary filesystem monitoring.
