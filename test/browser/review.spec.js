@@ -69,6 +69,17 @@ for (const scheme of ["light", "dark"])
       });
       for (const view of ["Story", "Changes", "Map", "Journey"]) {
         await page.getByRole("tab", { name: view, exact: true }).click();
+        if (view === "Map") {
+          const fontSize = await page
+            .locator(".graph-node text")
+            .first()
+            .evaluate(
+              (t) =>
+                parseFloat(getComputedStyle(t).fontSize) *
+                Math.hypot(t.getScreenCTM().a, t.getScreenCTM().b),
+            );
+          expect(fontSize).toBeGreaterThanOrEqual(10);
+        }
         if (view === "Map" && width === 900)
           await expect(page.locator(".graph")).toHaveAttribute(
             "viewBox",
@@ -255,6 +266,27 @@ test("figures show real relationships and drive the shared selection", async ({
   expect(edge.length).toBeGreaterThan(0);
   expect(edge.stroke).not.toBe("none");
   expect(Number(edge.opacity)).toBeGreaterThan(0);
+  for (const name of [
+    "Auth tests",
+    "Login API",
+    "Route middleware",
+    "Session service",
+  ]) {
+    await page
+      .getByRole("button", { name: "Inspect " + name, exact: true })
+      .click();
+    const labels = await page
+      .locator(".graph-edge.selected title")
+      .allTextContents();
+    expect(labels).toHaveLength(2);
+    expect(
+      labels.every(
+        (label) =>
+          label.startsWith(name + " depends on ") ||
+          label.endsWith(" depends on " + name),
+      ),
+    ).toBe(true);
+  }
   await page.getByLabel("Zoom in").click();
   expect(
     await page.locator(".graph").evaluate((node) => node.style.width),

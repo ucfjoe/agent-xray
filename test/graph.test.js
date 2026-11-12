@@ -69,3 +69,26 @@ test("cycles, reversed edges, self loops and high-degree nodes stay outside card
     assertClear(layoutGraph(nodes, es, compact));
   }
 });
+
+test("diamond relationships have no crossings in either layout", () => {
+  for (const compact of [true, false]) {
+    const g = layoutGraph(nodes, edges, compact);
+    const segments = g.edges.flatMap((edge, id) =>
+      edge.points.slice(1).map((b, i) => ({ id, a: edge.points[i], b })),
+    );
+    for (const s of segments)
+      for (const t of segments) {
+        if (s.id === t.id) continue;
+        if (s.a.x === s.b.x && t.a.y === t.b.y) {
+          assert.ok(
+            !(
+              s.a.x > Math.min(t.a.x, t.b.x) &&
+              s.a.x < Math.max(t.a.x, t.b.x) &&
+              t.a.y > Math.min(s.a.y, s.b.y) &&
+              t.a.y < Math.max(s.a.y, s.b.y)
+            ),
+          );
+        }
+      }
+  }
+});

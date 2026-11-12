@@ -35,3 +35,13 @@ The original screenshots covered only a subset of views. The expanded automated 
 The visual cognition agent inspected all 27 captures (24 view/theme/width combinations plus three multi-folder captures). Cross-folder labels, visible coverage explanation and responsive layout passed. The review identified unreadably scaled Map captions at 900px; the fix now selects compact layout using the map pane's available width, with a browser assertion for the resulting layout. A fresh capture verifies this separately.
 
 Remaining visual observations: compact graph arcs can overlap; multiple hunks in the same file need clearer row labels; example Journey titles embed timestamps that disagree with event times; footprint captions can shrink in medium-width layouts. These are documented follow-up work, not claimed fixed by the session-scope patch.
+
+## Blocking arrow-routing correction
+
+The initial review flagged overlapping arcs, but that finding was wrongly deferred. It is a diagram correctness issue, and the prior map image was not acceptable. The user rejected it before merge.
+
+The graph now uses topological ordering, distinct ports, orthogonal outside-card rails in compact mode, and column gutters/outer lanes in expanded mode. Selected-node relationships and arrowheads receive matching emphasis. The legend explicitly defines arrow direction. Geometry regressions cover the diamond, reversed edges, cycles, self loops, bounds and zero diamond crossings; an independent agent additionally checked 4,000 randomized layouts for card intersections and canvas bounds.
+
+The visual cognition expert re-inspected six fresh Map captures (light/dark at 380/900/1440). Verdict: **PASS for the pictured four-node graph**, with all relationships independently traceable, no hidden segments or crossings, distinct arrowheads, readable labels, and correct selected-edge emphasis. This is not a claim that arbitrary dense graphs have been visually validated. The screenshots in this PR replace the rejected map image.
+
+Release rule: material visual findings block visual sign-off until fixed, captured again, and rechecked. Automated code/geometry tests do not substitute for that gate.
