@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeSnapshot, projectReview } from "../core/model.js";
+import {
+  normalizeSnapshot,
+  projectReview,
+  newestFirst,
+} from "../core/model.js";
 import { render } from "../ui/render.js";
 import { initialState } from "../ui/state.js";
 
@@ -65,4 +69,18 @@ test("all activity lists display newest first without changing stored order or c
     );
   }
   assert.deepEqual(snapshot, before);
+});
+
+test("unknown chronology cannot block newer events and retains stable fallback order", () => {
+  const items = [
+    { id: "old", seq: 1, time: 100 },
+    { id: "unknown" },
+    { id: "new", seq: 2, time: 50 },
+    { id: "other" },
+    { id: "dated", time: 200 },
+  ];
+  assert.deepEqual(
+    newestFirst(items).map((x) => x.id),
+    ["new", "old", "dated", "unknown", "other"],
+  );
 });

@@ -49,13 +49,16 @@ export function newestFirst(items, events = []) {
       byId.get(item.sourceId) ?? byId.get(item.eventId) ?? byId.get(item.id);
     return { seq: item.seq ?? event?.seq, time: item.time ?? event?.time };
   };
+  const rank = (item) => {
+    const { seq, time } = position(item);
+    if (Number.isFinite(seq)) return [2, seq];
+    if (Number.isFinite(time)) return [1, time];
+    return [0, 0];
+  };
   return [...items].sort((a, b) => {
-    const x = position(a),
-      y = position(b);
-    if (Number.isFinite(x.seq) && Number.isFinite(y.seq)) return y.seq - x.seq;
-    if (Number.isFinite(x.time) && Number.isFinite(y.time))
-      return y.time - x.time;
-    return 0; // No recorded chronology: retain the source's deterministic order.
+    const x = rank(a),
+      y = rank(b);
+    return y[0] - x[0] || y[1] - x[1];
   });
 }
 export function projectReview(

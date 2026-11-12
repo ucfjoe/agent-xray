@@ -168,7 +168,7 @@ test("selected exact line survives view changes and reload", async ({
 }) => {
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto("/");
-  await page.locator(".file-row").first().click();
+  await page.locator('.file-row[data-select="auth-sign"]').click();
   await page.locator('[data-code-line="13"][data-code-side="next"]').click();
   await expect(page.locator('[data-line-selected="true"]')).toHaveCount(1);
   await page.getByRole("tab", { name: "Changes", exact: true }).click();
