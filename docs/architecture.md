@@ -27,6 +27,8 @@ The browser demo implements the review model with static sample data. Host API c
 
 ## First DSH integration
 
-The first adapter registers a conversation tab through the DSH slot service and serves the existing review UI in an iframe. Host routes use Connection admission checks. The lab supplies a fixed repository through XRAY_TEST_REPOSITORY. A refresh reads actual Git hunks against HEAD.
+The first adapter registers a retained right-sidebar panel through DSH’s native panel registry and slot service and serves the existing review UI in an iframe. Host routes use Connection admission checks. The lab supplies a fixed repository through XRAY_TEST_REPOSITORY. A refresh reads actual Git hunks against HEAD.
 
-This establishes plugin loading, authenticated host access, and Git inspection. Session-to-workspace resolution and agent event collection are still pending. Every session tab currently inspects the configured test repository. Codespaces supplies the proposed interactive cloud environment, with GitHub Actions exercising a real DSH process on Ubuntu.
+This establishes plugin loading, authenticated host access, and Git inspection. Session-to-workspace resolution and agent event collection are still pending. Every sidebar instance currently inspects the configured test repository. Codespaces supplies the proposed interactive cloud environment, with GitHub Actions exercising a real DSH process on Ubuntu.
+
+The sidebar owns resizing, fullscreen, and retained mounting. The iframe mirrors the host’s semantic theme tokens and typography on load and on theme changes. Its layout responds to the sidebar width.

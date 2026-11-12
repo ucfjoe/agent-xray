@@ -14,7 +14,7 @@ npm run lab:start
 
 Open the tokenized URL printed by DSH. The token authenticates your browser to that lab instance. Choose Configure later to inspect the UI without a model key.
 
-Create a session and open its Agent X-Ray tab. Without a model credential, sending the first message creates a session and reports a missing credential. X-Ray can still inspect the sample Git change. The panel reads the configured sample repository for every session, and labels that scope explicitly.
+Open the right sidebar, then choose Agent X-Ray from its Start page. The native sidebar can resize, split, or expand to fullscreen. X-Ray follows DSH’s theme and retains its view while hidden. Without a model credential, sending the first message creates a session and reports a missing credential. X-Ray can still inspect the sample Git change. The sidebar reads the configured sample repository for every session, and labels that scope explicitly.
 
 Edit `.lab/sample-repo/greet.js`, then press Refresh Git changes. The initial fixture contains a small input-validation change. Re-running setup preserves existing fixture edits.
 
@@ -34,7 +34,7 @@ Keep port 3080 private. The startup script includes the exact Codespaces forward
 
 GitHub Actions runs both checks on Ubuntu for pushes and pull requests.
 
-Manual browser checks verified the plugin is enabled in DSH, the Agent X-Ray session tab opens, and real hunks render with module grouping and side-by-side line numbers. Automated browser interaction coverage is pending.
+Manual browser checks verified the plugin is enabled in DSH, the Agent X-Ray panel opens, and real hunks render with module grouping and side-by-side line numbers. Automated browser interaction coverage is pending.
 
 ## Current boundaries
 
