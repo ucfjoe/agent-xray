@@ -1103,3 +1103,18 @@ figure {
   font-size: 11px;
   line-height: 1.45;
 }
+
+.graph-edge {
+  stroke-width: 1.25;
+  opacity: 0.8;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.graph-edge.selected {
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  opacity: 1;
+}
+.graph marker .selected-arrow {
+  fill: var(--accent);
+}

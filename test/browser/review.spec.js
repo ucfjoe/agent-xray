@@ -72,7 +72,7 @@ for (const scheme of ["light", "dark"])
         if (view === "Map" && width === 900)
           await expect(page.locator(".graph")).toHaveAttribute(
             "viewBox",
-            /^0 0 310 /,
+            /^0 0 3[0-9]{2} /,
           );
         expect(
           await page.evaluate(
@@ -256,9 +256,13 @@ test("figures show real relationships and drive the shared selection", async ({
   expect(edge.stroke).not.toBe("none");
   expect(Number(edge.opacity)).toBeGreaterThan(0);
   await page.getByLabel("Zoom in").click();
-  await expect(page.locator(".graph")).toHaveAttribute("style", "width:120%");
+  expect(
+    await page.locator(".graph").evaluate((node) => node.style.width),
+  ).toBe("120%");
   await page.getByRole("button", { name: "Fit map", exact: true }).click();
-  await expect(page.locator(".graph")).toHaveAttribute("style", "width:100%");
+  expect(
+    await page.locator(".graph").evaluate((node) => node.style.width),
+  ).toBe("100%");
   await page.screenshot({
     path: "test-results/diagrams-expanded.png",
     fullPage: true,

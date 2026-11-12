@@ -146,16 +146,23 @@ function map(snapshot, p, state) {
       : globalThis.innerWidth - Math.max(300, globalThis.innerWidth * 0.4)) -
       32 <
     650;
-  const { positions, width, height } = layoutGraph(nodes, deps, compact);
-  const edges = deps.filter(
-    (d) => positions.has(d.from) && positions.has(d.to),
+  const { positions, width, height, edges } = layoutGraph(nodes, deps, compact);
+  const selectedNodes = new Set(
+    nodes.filter((n) =>
+      p.hunks.some(
+        (h) =>
+          h.id === state.selected &&
+          ((relations.find((r) => r.hunkId === h.id)?.target ?? h.path) === n ||
+            (h.symbol && h.path + "::" + h.symbol === n)),
+      ),
+    ),
   );
-  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%${compact ? `;max-width:${(390 * (state.mapZoom ?? 100)) / 100}px` : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
-    .map((d) => {
-      const a = positions.get(d.from),
-        b = positions.get(d.to);
-      return `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""}" d="${a.x === b.x ? `M${a.x + 115},${a.y + 66} C${a.x + 260},${a.y + 85} ${b.x + 260},${b.y - 20} ${b.x + 115},${b.y}` : `M${a.x + 230},${a.y + 33} C${a.x + 250},${a.y + 33} ${b.x - 20},${b.y + 33} ${b.x},${b.y + 33}`}" marker-end="url(#arrow)"/>`;
-    })
+  const incident = (d) => selectedNodes.has(d.from) || selectedNodes.has(d.to);
+  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%;min-width:${Math.round((width * 0.92 * (state.mapZoom ?? 100)) / 100)}px${compact ? `;max-width:${(390 * (state.mapZoom ?? 100)) / 100}px` : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker><marker id="arrow-selected" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="selected-arrow" d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
+    .map(
+      (d) =>
+        `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""} ${incident(d) ? "selected" : ""}" d="${d.path}" marker-end="url(#${incident(d) ? "arrow-selected" : "arrow"})"><title>${e(d.from)} ${d.kind === "containment" ? "contains" : "depends on"} ${e(d.to)}</title></path>`,
+    )
     .join("")}${nodes
     .map((n) => {
       const pos = positions.get(n);
@@ -165,11 +172,11 @@ function map(snapshot, p, state) {
           (h.symbol && h.path + "::" + h.symbol === n),
       );
       const selected = hunks.some((h) => h.id === state.selected);
-      return `<g class="graph-node ${selected ? "selected" : ""}" ${hunks.length ? `data-select="${e(hunks[0].id)}" tabindex="0" role="button" aria-label="Inspect ${e(n)}"` : ""} transform="translate(${pos.x},${pos.y})"><rect width="230" height="66" rx="9"/><text x="14" y="26">${e(n.length > 28 ? "…" + n.slice(-27) : n)}</text><text class="node-subtitle" x="14" y="48">${hunks.length ? `${hunks.length} changes` : "Dependency"}</text></g>`;
+      return `<g class="graph-node ${selected ? "selected" : ""}" ${hunks.length ? `data-select="${e(hunks[0].id)}" tabindex="0" role="button" aria-label="Inspect ${e(n)}"` : ""} transform="translate(${pos.x},${pos.y})"><rect width="230" height="${pos.height}" rx="9"/><text x="14" y="26">${e(n.length > 28 ? "…" + n.slice(-27) : n)}</text><text class="node-subtitle" x="14" y="48">${hunks.length ? `${hunks.length} ${hunks.length === 1 ? "change" : "changes"}` : "Dependency"}</text></g>`;
     })
     .join(
       "",
-    )}</svg></div><p class="map-note">Solid edges: dependencies. Dashed edges: symbol containment. Up to 40 nodes; use the list for all changes. ${edges.length ? "Arrows show " + (snapshot.source === "demo" ? "illustrative" : "observed static") + " dependencies." : "No dependency edges available. Nodes show changed files or directory groups, not an inferred dependency graph."}</p><details class="map-list"><summary>Browse map as a list</summary>${p.hunks
+    )}</svg></div><p class="map-note">A → B: A depends on B. Dashed edges: A contains B. Highlighted arrows connect the selected change. Up to 40 nodes; use the list for all changes. ${edges.length ? "Arrows show " + (snapshot.source === "demo" ? "illustrative" : "observed static") + " dependencies." : "No dependency edges available. Nodes show changed files or directory groups, not an inferred dependency graph."}</p><details class="map-list"><summary>Browse map as a list</summary>${p.hunks
     .map((h) =>
       fileRow(
         h,
