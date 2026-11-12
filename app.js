@@ -1,254 +1,312 @@
-const params = new URLSearchParams(location.search);
-const live = params.has("live");
-const initialExample = exampleScenarios.find((scenario) => scenario.id === params.get("demo")) ?? exampleScenarios[0];
-let changes = [];
-let currentScenario;
-let pendingRequest;
-
-const fields = { task: "Implementation task", capability: "Business capability", module: "Architecture module", risk: "Review priority", milestone: "Conversation milestone" };
-const state = { task: "", view: "story", group: "task", selected: changes[0]?.id };
-const byId = (id) => document.getElementById(id);
-const tasks = byId("task");
-const source = byId("source");
-const scenarios = byId("scenario");
-const status = byId("source-status");
-const refresh = document.createElement("button");
-refresh.textContent = "Refresh Git changes";
-refresh.hidden = true;
-byId("panel").querySelector("header").append(refresh);
-for (const scenario of exampleScenarios) scenarios.add(new Option(scenario.title, scenario.id));
-scenarios.value = initialExample.id;
-source.value = live && !params.has("demo") ? "live" : "examples";
-if (!live) source.querySelector('[value="live"]').disabled = true;
-
-function visibleChanges() {
-  return changes.filter((change) => !state.task || change.task === state.task);
-}
-
-function replaceChanges(nextChanges) {
-  changes = nextChanges;
-  if (!changes.some((change) => change.task === state.task)) state.task = "";
-  const entries = visibleChanges();
-  if (!entries.some((change) => change.id === state.selected)) state.selected = entries[0]?.id;
-  tasks.replaceChildren(new Option("All objectives", ""));
-  for (const task of new Set(changes.map((change) => change.task))) tasks.add(new Option(task, task));
-  tasks.value = state.task;
-  tasks.disabled = !changes.length;
-  renderNavigation();
-  renderDetail();
-}
-
-function list(label, entries, title) {
-  const section = document.createElement("section");
-  const heading = document.createElement("h2");
-  heading.textContent = label;
-  section.append(heading);
-  const items = document.createElement("ul");
-  for (const change of entries) {
-    const item = document.createElement("li");
-    const button = document.createElement("button");
-    const text = document.createElement("span");
-    text.textContent = title(change);
-    button.append(text);
-    if (change.check) {
-      const check = document.createElement("small");
-      check.className = "check-state";
-      check.dataset.status = change.check.status.toLowerCase();
-      check.textContent = change.check.status;
-      button.append(check);
-    }
-    button.dataset.hunk = change.id;
-    button.setAttribute("aria-pressed", change.id === state.selected);
-    item.append(button);
-    items.append(item);
-  }
-  section.append(items);
-  return section;
-}
-
-function grouped(entries, field, title) {
-  const groups = new Map();
-  for (const change of entries) {
-    const key = change[field];
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(change);
-  }
-  return Array.from(groups, ([name, members]) => list(name, members, title));
-}
-
-function renderNavigation() {
-  const entries = visibleChanges();
-  byId("scope-summary").textContent = [
-    entries.length + " hunks",
-    new Set(entries.map((change) => change.path)).size + " files",
-    new Set(entries.map((change) => change.task)).size + " tasks",
-  ].join(" · ");
-  const navigation = byId("navigation");
-  navigation.replaceChildren();
-  switch (state.view) {
-    case "changes": {
-      const label = document.createElement("label");
-      label.textContent = "Group by ";
-      const select = document.createElement("select");
-      for (const [key, name] of Object.entries(fields)) select.add(new Option(name, key));
-      select.value = state.group;
-      select.addEventListener("change", () => {
-        state.group = select.value;
-        renderNavigation();
-        navigation.querySelector("select").focus();
-      });
-      label.append(select);
-      navigation.append(label, ...grouped(entries, state.group, (change) => `${change.path} · line ${change.newLine}`));
-      break;
-    }
-    case "map": {
-      for (const moduleName of new Set(entries.map((change) => change.module))) {
-        const members = entries.filter((change) => change.module === moduleName);
-        const section = list(moduleName, members, (change) => change.story);
-        const module = currentScenario?.modules.find((entry) => entry.name === moduleName);
-        if (module) {
-          const connections = document.createElement("p");
-          connections.className = "module-connections";
-          connections.textContent = module.dependsOn.length ? "Depends on " + module.dependsOn.join(", ") : "No outgoing dependencies in this example";
-          section.querySelector("h2").after(connections);
-        }
-        navigation.append(section);
-      }
-      break;
-    }
-    case "journey":
-      navigation.append(list("Agent actions", entries, (change) => change.action));
-      break;
-    default:
-      navigation.append(...grouped(entries, "task", (change) => change.story));
-  }
-}
-
-function diffColumn(lines, oldStart, newStart, side) {
-  const column = document.createElement("pre");
-  if (side) column.setAttribute("aria-label", side === "before" ? "Before" : "After");
-  let oldLine = oldStart;
-  let newLine = newStart;
-  for (const line of lines) {
-    const row = document.createElement("span");
-    const sign = line[0];
-    const before = sign === "+" ? "" : oldLine++;
-    const after = sign === "-" ? "" : newLine++;
-    const numbers = side === "before" ? [before] : side === "after" ? [after] : [before, after];
-    row.textContent = numbers.map((number) => String(number).padStart(3)).join(" ") + "  " + line;
-    if (sign === "+") row.className = "added";
-    if (sign === "-") row.className = "removed";
-    column.append(row);
-  }
-  return column;
-}
-
-function renderDetail() {
-  const change = changes.find(({ id }) => id === state.selected);
-  byId("check-detail").hidden = !change?.check;
-  byId("change-context").textContent = "";
-  if (!change) {
-    byId("path").textContent = "No selected change";
-    byId("evidence").textContent = "";
-    byId("verification").textContent = "";
-    byId("diff").replaceChildren();
-    return;
-  }
-  byId("path").textContent = `${change.path} · line ${change.newLine}`;
-  byId("evidence").textContent = change.evidence;
-  byId("change-context").textContent = change.task + " · " + change.capability + " · " + change.risk + " risk";
-  byId("verification").textContent = change.verification ?? "";
-  if (change.check) {
-    byId("check-summary").textContent = "Example verification · " + change.check.status;
-    byId("check-summary").dataset.status = change.check.status.toLowerCase();
-    byId("check-command").textContent = change.check.command;
-    byId("check-output").textContent = change.check.output;
-    byId("check-detail").open = change.check.status === "Failed";
-  }
-  const columns = byId("layout").value === "split"
-    ? [
-        diffColumn(change.lines.filter((line) => line[0] !== "+"), change.oldLine, change.newLine, "before"),
-        diffColumn(change.lines.filter((line) => line[0] !== "-"), change.oldLine, change.newLine, "after"),
-      ]
-    : [diffColumn(change.lines, change.oldLine, change.newLine)];
-  byId("diff").replaceChildren(...columns);
-}
-
-function activate(container, key, action) {
-  container.addEventListener("click", (event) => {
-    const button = event.target.closest("button");
-    if (!button) return;
-    for (const choice of container.querySelectorAll("button")) choice.setAttribute("aria-pressed", choice === button);
-    action(button.dataset[key]);
-  });
-}
-
-activate(byId("modes"), "mode", (mode) => { byId("workspace").dataset.mode = mode; });
-activate(byId("views"), "view", (view) => {
-  state.view = view;
-  renderNavigation();
-});
-activate(byId("navigation"), "hunk", (id) => {
-  state.selected = id;
-  renderDetail();
-});
-tasks.addEventListener("change", () => {
-  state.task = tasks.value;
-  const current = changes.find(({ id }) => id === state.selected);
-  if (state.task && current?.task !== state.task) state.selected = changes.find(({ task }) => task === state.task).id;
-  renderNavigation();
-  renderDetail();
-});
-byId("layout").addEventListener("change", renderDetail);
-
-if (live) {
-  byId("host").hidden = true;
-  byId("workspace").dataset.mode = "max";
-  byId("modes").hidden = true;
-}
-
-async function selectSource() {
-  pendingRequest?.abort();
-  const showExamples = source.value === "examples";
-  refresh.hidden = showExamples;
-  byId("scenario-control").hidden = !showExamples;
-  byId("example-notice").hidden = !showExamples;
-  byId("scenario-goal").hidden = !showExamples;
-  currentScenario = showExamples ? exampleScenarios.find((scenario) => scenario.id === scenarios.value) : undefined;
-  if (showExamples) {
-    refresh.disabled = false;
-    byId("scenario-goal").textContent = currentScenario.goal;
-    status.textContent = live
-      ? "Example data · Select a task or hunk to explore its context. Switch to Live Git changes for the configured repository."
-      : "Example data · Open the DSH sidebar to inspect live changes.";
-    replaceChanges(currentScenario.changes);
-    return;
-  }
-  const request = new AbortController();
-  pendingRequest = request;
-  refresh.disabled = true;
-  status.textContent = "Reading test repository…";
-  const previousSelection = { task: state.task, selected: state.selected };
-  replaceChanges([]);
+import { normalizeSnapshot, fromExample, projectReview } from "./core/model.js";
+import { initialState, reduceReview, restoreState } from "./ui/state.js";
+import { render } from "./ui/render.js";
+import { patchText } from "./ui/diff.js";
+const params = new URLSearchParams(location.search),
+  sessionId = params.get("session") ?? "";
+let source = params.has("live") ? "session" : "demo",
+  scenario = params.get("demo") ?? "authentication";
+const scenarios = exampleScenarios;
+const root = document.getElementById("app");
+let snapshot = normalizeSnapshot({ title: "Session review" }),
+  state = initialState(),
+  error = "",
+  pending = null,
+  history = [],
+  request,
+  revision = 0;
+const stateKey = () =>
+  `xray:v2:${sessionId}:${source}:${source === "demo" ? scenario : ""}`;
+function save() {
   try {
-    const response = await fetch("/agent-xray/changes", { signal: request.signal });
-    if (!response.ok) throw new Error("Git changes unavailable (HTTP " + response.status + ")");
-    const result = await response.json();
-    if (request.signal.aborted) return;
-    state.task = previousSelection.task;
-    state.selected = previousSelection.selected;
-    replaceChanges(result.changes);
-    status.textContent = result.note;
-  } catch (error) {
-    if (request.signal.aborted) return;
-    replaceChanges([]);
-    status.textContent = error.message;
+    sessionStorage.setItem(stateKey(), JSON.stringify(state));
+  } catch {}
+}
+function draw() {
+  const focus = document.activeElement;
+  const focusId = focus?.id;
+  const focusKind = focus?.classList.contains("file-row")
+    ? ".file-row"
+    : focus?.classList.contains("impact-row")
+      ? ".impact-row"
+      : "";
+  const focusAttr = [
+    "data-select",
+    "data-view",
+    "data-layout",
+    "data-action",
+  ].find((attr) => focus?.hasAttribute(attr));
+  const focusValue = focusAttr ? focus.getAttribute(focusAttr) : null;
+  const caret = focus?.selectionStart;
+  const positions =
+    state.scroll?.[state.view + ":" + (state.selected ?? "")] ??
+    [...root.querySelectorAll(".navigator,.inspector,.code-scroll")].map(
+      (n) => [n.className, n.scrollTop, n.scrollLeft],
+    );
+  root.innerHTML = render(snapshot, state, {
+    source,
+    scenarios,
+    scenario,
+    error,
+    pending,
+    history,
+  });
+  for (const [cls, top, left] of positions) {
+    const node = root.getElementsByClassName(cls)[0];
+    if (node) {
+      node.scrollTop = top;
+      node.scrollLeft = left;
+    }
+  }
+  if (focusId) {
+    const node = document.getElementById(focusId);
+    node?.focus({ preventScroll: true });
+    if (node?.type === "search" && caret !== null)
+      node.setSelectionRange(caret, caret);
+  }
+  if (!focusId && focusAttr) {
+    const target = root.querySelector(
+      `${focusKind}[${focusAttr}="${CSS.escape(focusValue)}"]`,
+    );
+    if (target?.getClientRects().length) target.focus({ preventScroll: true });
+    else {
+      const back = root.querySelector(".back-button");
+      if (back?.getClientRects().length) back.focus({ preventScroll: true });
+      else if (state.selected)
+        root
+          .querySelector(
+            `.file-row[data-select="${CSS.escape(state.selected)}"]`,
+          )
+          ?.focus({ preventScroll: true });
+    }
+  }
+  save();
+}
+function dispatch(action) {
+  state = reduceReview(state, action);
+  draw();
+}
+function apply(next) {
+  snapshot = normalizeSnapshot(next);
+  history = next.history ?? history;
+  if (!snapshot.hunks.some((h) => h.id === state.selected))
+    state.selected = null;
+  error = "";
+  pending = null;
+  draw();
+}
+async function load({ background = false } = {}) {
+  if (source === "demo") {
+    apply(
+      fromExample(scenarios.find((s) => s.id === scenario) ?? scenarios[0]),
+    );
+    return;
+  }
+  if (!sessionId) {
+    error = "Open Agent X-Ray from a DSH session to inspect real activity.";
+    draw();
+    return;
+  }
+  if (request && background) return;
+  request?.abort();
+  const controller = new AbortController();
+  request = controller;
+  const own = ++revision;
+  const url = new URL("/agent-xray/review", location.origin);
+  url.searchParams.set("session", sessionId);
+  url.searchParams.set("scope", source);
+  if (state.historyId && !background)
+    url.searchParams.set("snapshot", state.historyId);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    const data = await res.json();
+    if (!res.ok) throw Error(data.error ?? "Review unavailable");
+    if (own !== revision) return;
+    if (
+      background &&
+      data.snapshotId !== snapshot.snapshotId &&
+      !state.follow
+    ) {
+      if (pending?.snapshotId === data.snapshotId) return;
+      pending = data;
+      history = data.history ?? history;
+      draw();
+      return;
+    }
+    if (background && data.snapshotId === snapshot.snapshotId) return;
+    if (state.follow)
+      state = reduceReview(state, { type: "incoming", snapshot: data });
+    apply(data);
+  } catch (e) {
+    if (e.name !== "AbortError" && own === revision) {
+      error = e.message;
+      draw();
+    }
   } finally {
-    if (!request.signal.aborted) refresh.disabled = false;
+    if (request === controller) request = null;
   }
 }
+root.addEventListener("click", async (event) => {
+  const line = event.target.closest("[data-code-line]");
+  if (line) {
+    dispatch({
+      patch: {
+        selectedLine: {
+          line: Number(line.dataset.codeLine),
+          side: line.dataset.codeSide,
+        },
+      },
+    });
+    return;
+  }
+  const selected = event.target.closest("[data-select]");
+  if (selected) {
+    dispatch({ type: "select", id: selected.dataset.select });
+    return;
+  }
+  const view = event.target.closest("[data-view][role=tab]");
+  if (view) {
+    dispatch({ type: "view", view: view.dataset.view });
+    return;
+  }
+  const layout = event.target.closest("[data-layout]");
+  if (layout) {
+    dispatch({ patch: { layout: layout.dataset.layout } });
+    return;
+  }
+  const action = event.target.closest("[data-action]")?.dataset.action;
+  if (action?.startsWith("trace-")) {
+    const h = snapshot.hunks.find((h) => h.id === state.selected);
+    if (action === "trace-intent") {
+      const task = snapshot.relationships.find(
+        (r) => r.hunkId === h?.id && r.kind === "task",
+      );
+      dispatch({
+        patch: {
+          view: "story",
+          objectiveId: task?.target ?? "",
+          detail: false,
+        },
+      });
+    }
+    if (action === "trace-action") dispatch({ type: "view", view: "journey" });
+    if (action === "trace-code") root.querySelector(".code-scroll")?.focus();
+    if (action === "trace-check") {
+      const node = root.querySelector(".context-card:last-child");
+      if (node) {
+        node.open = true;
+        node.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }
+  if (action === "refresh") {
+    await load();
+  }
+  if (action === "back") dispatch({ patch: { detail: false } });
+  if (action === "follow") {
+    dispatch({ patch: { follow: !state.follow, historyId: "" } });
+    if (state.follow) await load();
+  }
+  if (action === "catchup") {
+    state.historyId = "";
+    apply(pending);
+  }
+  if (action === "fit") {
+    dispatch({ patch: { mapZoom: 100 } });
+    root.querySelector(".graph-scroll")?.scrollTo({ left: 0, top: 0 });
+  }
+  if (action === "zoom-in" || action === "zoom-out")
+    dispatch({
+      patch: {
+        mapZoom: Math.max(
+          60,
+          Math.min(
+            240,
+            (state.mapZoom ?? 100) + (action === "zoom-in" ? 20 : -20),
+          ),
+        ),
+      },
+    });
+  if (action === "next" || action === "previous") {
+    const p = projectReview(snapshot, state);
+    const at = p.hunks.findIndex((h) => h.id === state.selected);
+    const h = p.hunks[at + (action === "next" ? 1 : -1)];
+    if (h) dispatch({ type: "select", id: h.id });
+  }
+  if (action === "copy") {
+    const h = snapshot.hunks.find((h) => h.id === state.selected);
+    if (h)
+      try {
+        await navigator.clipboard.writeText(patchText(h));
+        document.getElementById("announcement").textContent = "Copied change";
+        event.target.textContent = "Copied";
+      } catch {
+        error = "Clipboard access is unavailable in this browser.";
+        draw();
+      }
+  }
+});
+root.addEventListener("keydown", (event) => {
+  if (
+    event.target.matches("[data-code-line]") &&
+    ["Enter", " "].includes(event.key)
+  ) {
+    event.preventDefault();
+    event.target.click();
+  }
+  if (
+    event.target.matches(".graph-node,.impact-row") &&
+    ["Enter", " "].includes(event.key)
+  ) {
+    event.preventDefault();
+    dispatch({ type: "select", id: event.target.dataset.select });
+  }
+});
+root.addEventListener("input", (event) => {
+  if (event.target.id === "search")
+    dispatch({ patch: { query: event.target.value, detail: false } });
+});
+root.addEventListener("change", async (event) => {
+  const { id, value } = event.target;
+  if (id === "source" || id === "scenario") {
+    save();
+    request?.abort();
+    revision++;
+    request = null;
+    if (id === "source") source = value;
+    else scenario = value;
+    state = restoreState(sessionStorage, stateKey());
+    snapshot = normalizeSnapshot({ title: "Loading review…" });
+    pending = null;
+    error = "";
+    history = [];
+    draw();
+    await load();
+    return;
+  }
+  if (id === "objective")
+    dispatch({ patch: { objectiveId: value, detail: false } });
+  if (id === "group") dispatch({ patch: { groupBy: value } });
+  if (id === "history") {
+    state.historyId = value;
+    state.follow = false;
+    await load();
+  }
+});
+state = restoreState(sessionStorage, stateKey());
+draw();
+load();
+setInterval(() => {
+  if (source !== "demo" && !document.hidden) load({ background: true });
+}, 5000);
 
-source.addEventListener("change", selectSource);
-scenarios.addEventListener("change", selectSource);
-refresh.addEventListener("click", selectSource);
-selectSource();
+root.addEventListener(
+  "scroll",
+  () => {
+    state.scroll[state.view + ":" + (state.selected ?? "")] = [
+      ...root.querySelectorAll(".navigator,.inspector,.code-scroll"),
+    ].map((n) => [n.className, n.scrollTop, n.scrollLeft]);
+    save();
+  },
+  true,
+);

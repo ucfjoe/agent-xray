@@ -1,20 +1,30 @@
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 const child = spawn(process.execPath, ["scripts/start-lab.js"], {
-  env: { ...process.env, XRAY_PORT: "3088" }, stdio: ["ignore", "pipe", "pipe"],
+  env: { ...process.env, XRAY_PORT: "3088" },
+  stdio: ["ignore", "pipe", "pipe"],
 });
 let output = "";
 const ready = new Promise((resolve, reject) => {
-  const deadline = setTimeout(() => reject(new Error("DSH did not become ready")), 90000);
+  const deadline = setTimeout(
+    () => reject(new Error("DSH did not become ready")),
+    90000,
+  );
   function read(chunk) {
     output += chunk;
     const match = output.match(/http:\/\/127\.0\.0\.1:3088\/\?token=[\w-]+/);
-    if (match) { clearTimeout(deadline); resolve(match[0]); }
+    if (match) {
+      clearTimeout(deadline);
+      resolve(match[0]);
+    }
   }
   child.stdout.on("data", read);
   child.stderr.on("data", read);
   child.on("error", reject);
-  child.on("exit", (code) => { clearTimeout(deadline); reject(new Error("DSH exited before ready: " + code)); });
+  child.on("exit", (code) => {
+    clearTimeout(deadline);
+    reject(new Error("DSH exited before ready: " + code));
+  });
 });
 try {
   const loginUrl = await ready;
@@ -30,10 +40,41 @@ try {
   const result = await response.json();
   assert.ok(result.changes.some((change) => change.path === "greet.js"));
   for (const asset of ["index.html", "app.js", "examples.js", "style.css"]) {
-    assert.equal((await fetch(base + "/agent-xray/" + asset, { headers })).status, 200);
+    assert.equal(
+      (await fetch(base + "/agent-xray/" + asset, { headers })).status,
+      200,
+    );
   }
-  assert.equal((await fetch(base + "/agent-xray/changes", { headers: { ...headers, origin: "https://example.invalid" } })).status, 403);
-  console.log("Real DSH smoke test passed: plugin assets, Git changes, and authentication.");
+  assert.equal(
+    (
+      await fetch(base + "/agent-xray/changes", {
+        headers: { ...headers, origin: "https://example.invalid" },
+      })
+    ).status,
+    403,
+  );
+  if (process.env.XRAY_FIXTURES === "1") {
+    const reviews = [];
+    for (const id of ["xray-contract-a", "xray-contract-b"]) {
+      const response = await fetch(base + "/agent-xray/review?session=" + id, {
+        headers,
+      });
+      const review = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(review));
+      assert.equal(review.sessionId, id);
+      assert.equal(review.hunks.length, 1);
+      assert.equal(review.objectives.length, 1);
+      reviews.push(review);
+    }
+    assert.notEqual(reviews[0].workspaceId, reviews[1].workspaceId);
+    const absent = await fetch(base + "/agent-xray/review?session=missing", {
+      headers,
+    });
+    assert.notEqual(absent.status, 200);
+  }
+  console.log(
+    "Real DSH smoke test passed: plugin assets, Git changes, authentication and enabled session contracts.",
+  );
 } finally {
   child.kill("SIGTERM");
 }

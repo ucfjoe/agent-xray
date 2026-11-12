@@ -1,19 +1,51 @@
 {
   "name": "dsh-agent-xray",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "plugin/index.js",
-  "exports": { ".": "./plugin/index.js", "./client": "./plugin/client.js", "./package.json": "./package.json" },
-  "files": ["plugin", "index.html", "app.js", "examples.js", "style.css", "cordis.patch.yml"],
+  "exports": {
+    ".": "./plugin/index.js",
+    "./client": "./plugin/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "plugin",
+    "index.html",
+    "app.js",
+    "examples.js",
+    "style.css",
+    "cordis.patch.yml",
+    "core",
+    "ui"
+  ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
-    "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-runtime"] }
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
   },
   "scripts": {
     "test": "node --test test/*.test.js",
     "lab:setup": "node scripts/setup-lab.js",
-    "lab:start": "node scripts/start-lab.js"
+    "lab:start": "node scripts/start-lab.js",
+    "test:browser": "playwright test",
+    "format": "prettier --write app.js index.html style.css core ui plugin test scripts playwright.config.js"
   },
-  "engines": { "node": ">=22.19.0" }
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "diff": "8.0.3",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "prettier": "3.6.2"
+  }
 }

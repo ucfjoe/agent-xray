@@ -1,56 +1,52 @@
 # DeepSeek Harness test lab
 
-The lab runs DSH 0.2.0-rc.2 with Agent X-Ray installed as a web plugin. It uses an isolated DSH home and a disposable Git repository under `.lab/`. Model credentials can be entered through DSH's Models page when testing agent execution.
-
-## Run locally or on a Linux cloud machine
-
-Install Node 24 and Git, then run these commands in the checkout.
+The lab runs DSH 0.2.0-rc.2 with Agent X-Ray in an isolated DSH home and a disposable Git repository under `.lab/`. Node 24 is used in CI and Codespaces.
 
 ```sh
+npm ci
 npm install --global @deepseek-ai/dsh@0.2.0-rc.2
 npm run lab:setup
 npm run lab:start
 ```
 
-Open the tokenized URL printed by DSH. The token authenticates your browser to that lab instance. Choose Configure later to inspect the UI without a model key.
+Open the authenticated URL printed by DSH. Configure a workspace pointing at `.lab/sample-repo`, open or create a session, and choose Agent X-Ray from the right sidebar. No model key is required to inspect Git changes or opt-in examples. Agent execution requires a model configured through DSH; never place credentials in this repository.
 
-Open the right sidebar, then choose Agent X-Ray from its Start page. The native sidebar can resize, split, or expand to fullscreen. X-Ray follows DSH’s theme and retains its view while hidden. Without a model credential, sending the first message creates a session and reports a missing credential. X-Ray can still inspect the sample Git change. The sidebar reads the configured sample repository for every session, and labels that scope explicitly.
+## Sources
 
-Edit `.lab/sample-repo/greet.js`, then press Refresh Git changes. The initial fixture contains a small input-validation change. Re-running setup preserves existing fixture edits.
+- **Session** reads the selected DSH session's recorded requests, actions and edit evidence. It is the default. A session without recorded edits displays an empty state.
+- **Workspace** shows current tracked and untracked changes in that session's directory. This includes work outside the selected session and carries no automatic authorship claim.
+- **Examples** provides three fictional projects: authentication, checkout and catalog. Each has six hunks and illustrative verification output. They never become live session activity.
 
-To test actual agent editing, configure a model and create a DSH workspace pointing at the absolute path of `.lab/sample-repo`. Run a small task there, then refresh X-Ray. Attribution to agent actions, tasks, business capabilities, and executed tests remains future integration work.
+The native host controls resizing, split panes, fullscreen and collapse. Narrow layouts drill into the selected change; Back returns to the list. The review retains its selected view, filters, layout and scroll. Follow Agent defaults off; new updates can be adopted explicitly using Catch up.
 
-## GitHub Codespaces
+## Reproducible checks
 
-The checked-in dev container installs the pinned DSH release and prepares the lab. Open this repository's Code menu, choose Codespaces, and create a Codespace. Starting the Codespace launches DSH in the background. Read `.lab/server.log` for its authenticated startup URL.
+```sh
+npm test
+npx playwright install --with-deps chromium
+npm run test:browser
+XRAY_FIXTURES=1 npm run lab:setup
+XRAY_FIXTURES=1 node scripts/smoke-lab.js
+```
 
-Keep port 3080 private. The startup script includes the exact Codespaces forwarded hostname in DSH's trusted hosts. Open the forwarded port and append the `?token=…` query from DSH's startup URL to authenticate. Stop the Codespace after use. Compute and storage count against the account's Codespaces quota and billing settings.
+The fixture flag enables a test-only bundle in this isolated DSH home. It creates two deterministic sessions through DSH's real Session service and appends validated events. Smoke tests check root isolation, recorded edits, authentication and missing-session handling. These are synthetic fixtures, not a model execution, and the fixture bundle is excluded from the shipped package.
 
-## Checks
+Browser checks cover all views and scenarios, filtering, split diffs, narrow drill-down, light/dark captures, live catch-up, response cancellation and keyboard focus. Run them in CI or the cloud lab; there is no need to automate the user's laptop browser.
 
-`npm test` exercises parsing and a real temporary Git repository.
+For a standalone example preview use `node scripts/serve-preview.js`, then localhost port 3091. ES modules require HTTP; opening index.html directly as a file is unsupported.
 
-`node scripts/smoke-lab.js` starts a real DSH process on port 3088, authenticates using its launch token, checks the plugin assets and sample diff, and verifies anonymous and foreign-origin requests are rejected. It shuts the process down afterward.
+## Codespaces
 
-GitHub Actions runs both checks on Ubuntu for pushes and pull requests.
+The dev container installs dependencies and DSH, prepares the lab and starts the server. Port 3080 stays private. Read `.lab/server.log` for the token and append its query to the forwarded port URL. The startup script trusts the exact Codespaces forwarded hostname. Stop the Codespace when finished; compute and storage count against the account's quota/billing.
 
-Manual browser checks verified the plugin is enabled in DSH, the Agent X-Ray panel opens, and real hunks render with module grouping and side-by-side line numbers. Automated browser interaction coverage is pending.
+The rebuild is tested in a separate checkout and on port 3090, so the previous preview can remain available during review. No model API key is configured in that lab at the time of this rebuild.
 
-## Current boundaries
+## Limits
 
-The live panel displays tracked text hunks against HEAD, including staged and unstaged edits combined. Untracked files are counted separately. Binary and rename-only changes have no displayed hunks. Git output is limited to 4 MiB and commands time out after ten seconds, with failures shown in the panel.
+Workspace previews are bounded to 100 files, 512 KB per source file, 4 MiB of Git output and ten seconds per Git command. Untracked symlinks are not followed outside the workspace. Binary and oversized files have metadata rather than code previews.
 
-The architecture map currently groups by top-level directory. The standalone sample retains fictional task relationships. Live mode displays unavailable attribution and verification explicitly.
+Session previews process the latest 10,000 events, up to 1,000 hunks and roughly 4 MB of edit content, with explicit notices when bounded. DSH still supplies the validated source log. The map shows at most 40 nodes and offers a list alternative.
 
-The plugin requires DSH's Connection authentication service. Git paths come from the configured lab environment, and HTTP callers cannot select arbitrary directories.
+Historical snapshots persist under `$DSH_HOME/agent-xray/history`; no automatic deletion policy is enabled. DSH's own turn comparisons can expire before X-Ray captures them; persisted file-tool excerpts can still be replayed, but do not include original source line offsets. Generic command results remain recorded evidence without an automatic exact-hunk test verdict. See README for supported analysis and provenance.
 
-## Example sessions
-
-The sidebar opens with Live Git changes. Fictional scenarios are opt-in test fixtures: select Example scenarios in the Data source menu to explore them, then switch back to Live Git changes. They are never automatically loaded as session activity. Example actions and verification output are illustrative. The live source currently reads the configured lab repository; automatic session-to-workspace resolution remains future integration work.
-
-Three scenarios contain six hunks each.
-- Secure authentication includes cookie protection, signature checks, and a failing refresh-token concurrency test.
-- Reliable checkout includes idempotency, retries, a failing timeout check, and a pending database migration.
-- Faster product catalog includes batched reads, cache keys, incomplete invalidation, and a sample latency benchmark.
-
-Every scenario supports task filtering, all five grouping perspectives, module relationships, the agent journey, and both diff layouts. Selecting a failed check exposes its sample command and output. The live data path continues to show observed Git changes with unavailable attribution and verification.
+With an isolated DSH lab already running, `node scripts/native-browser.cjs` verifies the actual native sidebar (session identity, workspace Git, fullscreen/collapse, retained layout, and diagrams). Set `XRAY_LOG=.lab/rebuild-server.log` when testing the separate rebuild server. Run this in the cloud, not on the user's laptop. It uses or creates the disposable review session and captures `test-results/native-sidebar.png`.

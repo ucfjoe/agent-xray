@@ -1,15 +1,34 @@
 # Agent X-Ray
 
-A browser prototype for reviewing what a coding agent changed, why it changed, and how it was verified.
+A native DeepSeek Harness sidebar for understanding code changes and their evidence. It separates **Session** (recorded agent activity), **Workspace** (current Git differences, without authorship claims), and opt-in **Examples**.
 
-DeepSeek Harness is the current integration target. Support as a Claude mod plugin is planned for a later phase. The current deliverable is a standalone browser demo, with live DeepSeek Harness integration still to implement.
+The sidebar includes a change story, grouped explorer, dependency map, chronological journey, unified/split diffs, hunk navigation and copy, contextual provenance, command evidence, historical snapshots, search and opt-in Follow Agent. Narrow layouts drill into a focused inspector; expanded layouts put navigation beside code. Host theme and docking controls are retained.
 
-Open `index.html` in a browser. There are no dependencies or build steps. Select a task, architecture module, journey step, or Change Story entry to inspect the associated diff. Use **Group by** to browse the same changes by objective, business capability, module, risk, or milestone.
+## Development
 
-The prototype was reconstructed from the Agent X-Ray design discussion. It uses a fictional authentication session, including illustrative verification records. See [architecture and design decisions](docs/architecture.md).
+Node >=22.19.0; CI and the cloud lab use Node 24.
 
-## DeepSeek Harness test lab
+```sh
+npm ci
+npm test
+npm run lab:setup
+npm run lab:start
+```
 
-Agent X-Ray now includes a DSH web plugin and a repeatable test lab. Open Agent X-Ray from the right sidebar’s Start page to inspect real tracked Git changes in the configured sample repository. The standalone demo above remains available.
+Install `@deepseek-ai/dsh@0.2.0-rc.2` first. Open the authenticated URL printed by the lab. See [the lab guide](docs/test-lab.md).
 
-See [test lab setup and current boundaries](docs/test-lab.md). GitHub Codespaces configuration and an Ubuntu GitHub Actions smoke test are included. Live task attribution and test-execution evidence remain to implement.
+For a standalone example preview, run `node scripts/serve-preview.js` and open its localhost port 3091. The preview now uses ES modules and requires an HTTP server; opening `index.html` directly as a file is unsupported.
+
+Browser checks: `npx playwright install --with-deps chromium`, then `npm run test:browser`. No model credentials are required for deterministic fixtures. For the stronger native-host contract test, run `XRAY_FIXTURES=1 npm run lab:setup` followed by `XRAY_FIXTURES=1 node scripts/smoke-lab.js` in an isolated lab.
+
+## Evidence boundaries
+
+- Session scope comes from the native sidebar's session identity and DSH's validated history. It does not read one global test repository for every session.
+- File-tool results preserve recorded excerpts. DSH does not provide their original line offsets, so the UI labels them as excerpts and does not invent numbers.
+- DSH per-turn comparisons carry exact ranges, but may include concurrent workspace edits. Current workspace changes also do not establish authorship.
+- Static import/symbol analysis supports JavaScript/TypeScript. Other languages retain file navigation and explicit diagnostics. Only inspected changed sources contribute dependency edges.
+- Business/risk suggestions are labeled path-based heuristics. They are not agent declarations.
+- Generic command output is recorded execution evidence. It is not automatically treated as a passed test for an exact hunk. Examples' verification results are fictional.
+- The historical cache begins when this plugin observes or reads a session. Expired host-only turn comparisons cannot be reconstructed if they were never cached; persisted file-tool excerpts remain available.
+
+See [architecture](docs/architecture.md), [acceptance results](docs/acceptance-results.md), and the [recovery requirements](docs/superpowers/specs/2026-11-12-agent-xray-recovery.md). Claude mod integration remains deferred.
