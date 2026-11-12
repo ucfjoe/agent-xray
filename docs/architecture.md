@@ -1,5 +1,9 @@
 # Agent X-Ray architecture
 
+## Integration priority
+
+Build and validate the working integration for DeepSeek Harness first. Support as a Claude mod plugin is deferred to a later phase. Preserve the shared change model and review UI so a future host adapter can reuse them. Claude-specific APIs and packaging will be evaluated in that later phase.
+
 ## Review experience
 
 The default side panel starts with Change Story, a short sequence of outcomes whose entries open the exact diff. Split gives the reviewer more space alongside the host conversation. Max expands the inspection workspace. All three share selection and filters. The host conversation area in this demo is a placeholder.
