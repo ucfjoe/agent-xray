@@ -4,7 +4,7 @@
 
 - Native DSH 0.2.0-rc.2 session propagation, current workspace Git, fullscreen/collapse and retained diff layout: verified by cloud browser against the running harness. A native test exposed and corrected an initial component-prop binding mistake that a mock had missed.
 - Unit/integration suite: 23 passing tests covering model provenance, independent sessions, malformed/duplicate events, immutable concurrent history writes, unusual Git paths, binary/new/deleted files, outside symlinks, 100-file limits, split alignment and no-final-newline patch fidelity.
-- Browser suite covers all three example scenarios and four views, all grouping perspectives, filtering, narrow layout, light/dark captures, stale-response cancellation, catch-up/follow, keyboard focus, selected lines and 100-file search. Interactive diagrams have dedicated navigation checks.
+- Browser suite: 15 passing tests. Covers all three example scenarios and four views, all grouping perspectives, filtering, narrow layout, light/dark captures, stale-response cancellation, catch-up/follow, keyboard focus, selected lines and 100-file search. Interactive diagrams have dedicated navigation checks.
 - Actual DSH fixture contract: two sessions created through the native Session service resolve different roots and recorded edits. Invalid sessions cannot fall back to the lab repository. Authentication checks pass.
 - The packed 0.2.0 plugin installs and imports with production dependencies; fixture helpers and lab data are excluded.
 - Independent whole-branch review found six important defects. Literal pathspecs, exclusive history publication, replay deduplication, malformed metadata, newline fidelity and keyboard focus were corrected and covered by regressions.
