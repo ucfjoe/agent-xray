@@ -1,5 +1,5 @@
 import { impactFigure, traceFigure, layoutGraph } from "./figures.js";
-import { projectReview } from "../core/model.js";
+import { projectReview, newestFirst } from "../core/model.js";
 import { escape as e, renderDiff } from "./diff.js";
 const icons = { story: "≋", changes: "±", map: "◇", journey: "↳" };
 const basename = (p) => p.split("/").at(-1);
@@ -61,7 +61,7 @@ function explorer(p, state) {
 }
 function journey(snapshot, p, state) {
   const ids = new Set(p.hunks.map((h) => h.id));
-  const events = snapshot.events.filter(
+  const events = newestFirst(snapshot.events).filter(
     (ev) => !state.objectiveId || ev.objectiveId === state.objectiveId,
   );
   if (!events.length)
@@ -69,7 +69,7 @@ function journey(snapshot, p, state) {
       "No recorded activity",
       "Workspace diffs have no agent timeline. Select Session to review recorded actions.",
     );
-  return `<div class="section-heading"><span>SESSION JOURNEY</span><span>${events.length} events</span></div><ol class="timeline">${events
+  return `<div class="section-heading"><span>SESSION JOURNEY</span><span>${events.length} events · Newest first</span></div><ol class="timeline">${events
     .map((ev) => {
       const linked = (ev.hunkIds ?? []).filter((id) => ids.has(id));
       return `<li class="timeline-event ${e(ev.type)}"><span class="timeline-dot"></span><div class="event-meta"><span>${e(ev.type)}</span><time>${Number.isFinite(ev.time) ? new Date(ev.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Time unavailable"}</time></div><h2>${e(ev.title)}</h2>${ev.description ? `<p class="event-description">${e(ev.description)}</p>` : ""}<div>${linked
@@ -150,7 +150,7 @@ function detail(snapshot, h, state, p) {
   if (!h)
     return `<section class="inspector">${empty("Choose a change", "Select a story step, file, map node or timeline event to inspect its code and evidence.")}</section>`;
   const relationships = snapshot.relationships.filter((r) => r.hunkId === h.id);
-  const checks = snapshot.checks.filter(
+  const checks = newestFirst(snapshot.checks, snapshot.events).filter(
     (c) => c.hunkIds?.includes(h.id) || c.eventId === h.eventId,
   );
   const action = snapshot.events.find((ev) => ev.id === h.eventId);
@@ -204,5 +204,38 @@ export function render(
     )
     .join(
       "",
-    )}</div><div class="filter-bar"><input id="search" type="search" placeholder="Find a file or symbol…" aria-label="Find changed files" value="${e(state.query)}"><select id="objective" aria-label="Filter objective"><option value="">All objectives</option>${snapshot.objectives.map((o) => `<option value="${e(o.id)}" ${state.objectiveId === o.id ? "selected" : ""}>${e(o.title)}</option>`).join("")}</select></div>${source === "session" ? `<div class="history-bar"><select id="history" aria-label="Snapshot"><option value="">Latest observed</option>${(history ?? []).map((h) => `<option value="${e(h.id)}" ${state.historyId === h.id ? "selected" : ""}>${new Date(h.time).toLocaleString()} · ${h.count} changes</option>`).join("")}</select><button data-action="follow" aria-pressed="${state.follow}">◉ Follow agent</button></div>` : ""}<div class="review-body ${state.detail && selected ? "show-detail" : ""}" data-view="${state.view}"><section class="navigator" aria-label="${e(state.view)} view">${views[state.view]()}</section>${detail(snapshot, selected, state, p)}</div>${snapshot.checks.length && source !== "demo" ? `<details class="session-commands"><summary>Session command evidence <span>${snapshot.checks.length}</span></summary>${snapshot.checks.map((c) => `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`).join("")}</details>` : ""}<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Recorded session evidence"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p>${(snapshot.diagnostics ?? []).map((d) => `<p>${e(d.path)}: ${e(d.reason)}</p>`).join("")}</details></footer>`;
+    )}</div><div class="filter-bar"><input id="search" type="search" placeholder="Find a file or symbol…" aria-label="Find changed files" value="${e(state.query)}"><select id="objective" aria-label="Filter objective"><option value="">All objectives</option>${newestFirst(
+    snapshot.objectives,
+    snapshot.events,
+  )
+    .map(
+      (o) =>
+        `<option value="${e(o.id)}" ${state.objectiveId === o.id ? "selected" : ""}>${e(o.title)}</option>`,
+    )
+    .join("")}</select></div>${
+    source === "session"
+      ? `<div class="history-bar"><select id="history" aria-label="Snapshot"><option value="">Latest observed</option>${newestFirst(
+          history ?? [],
+        )
+          .map(
+            (h) =>
+              `<option value="${e(h.id)}" ${state.historyId === h.id ? "selected" : ""}>${new Date(h.time).toLocaleString()} · ${h.count} changes</option>`,
+          )
+          .join(
+            "",
+          )}</select><button data-action="follow" aria-pressed="${state.follow}">◉ Follow agent</button></div>`
+      : ""
+  }<div class="review-body ${state.detail && selected ? "show-detail" : ""}" data-view="${state.view}"><section class="navigator" aria-label="${e(state.view)} view">${views[state.view]()}</section>${detail(snapshot, selected, state, p)}</div>${
+    snapshot.checks.length && source !== "demo"
+      ? `<details class="session-commands"><summary>Session command evidence <span>${snapshot.checks.length}</span></summary>${newestFirst(
+          snapshot.checks,
+          snapshot.events,
+        )
+          .map(
+            (c) =>
+              `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`,
+          )
+          .join("")}</details>`
+      : ""
+  }<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Recorded session evidence"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p>${(snapshot.diagnostics ?? []).map((d) => `<p>${e(d.path)}: ${e(d.reason)}</p>`).join("")}</details></footer>`;
 }

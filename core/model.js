@@ -41,13 +41,30 @@ export function normalizeSnapshot(input = {}) {
   }
   return snapshot;
 }
+// Presentation order only: never reorder persisted history or lines within a diff.
+export function newestFirst(items, events = []) {
+  const byId = new Map(events.map((event) => [event.id, event]));
+  const position = (item) => {
+    const event =
+      byId.get(item.sourceId) ?? byId.get(item.eventId) ?? byId.get(item.id);
+    return { seq: item.seq ?? event?.seq, time: item.time ?? event?.time };
+  };
+  return [...items].sort((a, b) => {
+    const x = position(a),
+      y = position(b);
+    if (Number.isFinite(x.seq) && Number.isFinite(y.seq)) return y.seq - x.seq;
+    if (Number.isFinite(x.time) && Number.isFinite(y.time))
+      return y.time - x.time;
+    return 0; // No recorded chronology: retain the source's deterministic order.
+  });
+}
 export function projectReview(
   snapshot,
   { objectiveId = "", groupBy = "task", query = "" } = {},
 ) {
   const targets = (h, kind) =>
     snapshot.relationships.filter((r) => r.hunkId === h.id && r.kind === kind);
-  const hunks = snapshot.hunks.filter(
+  const hunks = newestFirst(snapshot.hunks, snapshot.events).filter(
     (h) =>
       (!objectiveId ||
         targets(h, "task").some((r) => r.target === objectiveId)) &&
