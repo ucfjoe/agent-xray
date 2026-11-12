@@ -62,6 +62,10 @@ export async function readSessionReview(
     checks: [],
     notices: [],
     milestones: [],
+    checkpointSeqs: raw
+      .slice(-10000)
+      .filter((e) => e.type === "workspace/changes")
+      .map((e) => e.seq),
     files: [],
   };
   const calls = new Map();
@@ -256,8 +260,32 @@ export async function readSessionReview(
         });
       }
     }
-    if (e.type === "workspace/changes" && services.workspaceChanges) {
-      const summary = services.workspaceChanges.summary(sessionId, e.seq);
+    if (e.type === "workspace/changes") {
+      let saved;
+      try {
+        saved = await services.readCheckpoint?.(sessionId, e.seq);
+      } catch {
+        model.notices.push(
+          "A saved turn comparison could not be read; trying the host comparison.",
+        );
+      }
+      if (saved) {
+        const bytes = JSON.stringify(saved).length;
+        if (
+          previewBytes + bytes > 4000000 ||
+          model.hunks.length + saved.hunks.length > 1000
+        ) {
+          model.notices.push("Saved turn comparison preview limit reached.");
+          continue;
+        }
+        previewBytes += bytes;
+        for (const h of saved.hunks) attach({ ...h }, e, undefined);
+        model.files.push(...saved.files);
+        model.events.push(saved.event);
+        model.notices.push(...saved.notices);
+        continue;
+      }
+      const summary = services.workspaceChanges?.summary(sessionId, e.seq);
       if (!summary) {
         model.notices.push(
           "A turn comparison is no longer available from DSH. Recorded file edits remain available.",
