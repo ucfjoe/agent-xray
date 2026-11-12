@@ -48,3 +48,5 @@ Workspace previews are bounded to 100 files, 512 KB per source file, 4 MiB of Gi
 Session previews process the latest 10,000 events, up to 1,000 hunks and roughly 4 MB of edit content, with explicit notices when bounded. DSH still supplies the validated source log. The map shows at most 40 nodes and offers a list alternative.
 
 Historical snapshots persist under `$DSH_HOME/agent-xray/history`; no automatic deletion policy is enabled. DSH's own turn comparisons can expire before X-Ray captures them; persisted file-tool excerpts can still be replayed, but do not include original source line offsets. Generic command results remain recorded evidence without an automatic exact-hunk test verdict. See README for supported analysis and provenance.
+
+With an isolated DSH lab already running, `node scripts/native-browser.cjs` verifies the actual native sidebar (session identity, workspace Git, fullscreen/collapse, retained layout, and diagrams). Set `XRAY_LOG=.lab/rebuild-server.log` when testing the separate rebuild server. Run this in the cloud, not on the user's laptop. It uses or creates the disposable review session and captures `test-results/native-sidebar.png`.
