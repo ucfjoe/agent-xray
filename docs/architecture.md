@@ -1,34 +1,29 @@
 # Agent X-Ray architecture
 
-## Integration priority
+## Host boundary
 
-Build and validate the working integration for DeepSeek Harness first. Support as a Claude mod plugin is deferred to a later phase. Preserve the shared change model and review UI so a future host adapter can reuse them. Claude-specific APIs and packaging will be evaluated in that later phase.
+`plugin/client.js` registers a retained native right-sidebar body. Its session-scoped factory supplies the exact session ID to the iframe. DSH owns docking, resizing and fullscreen. Theme tokens and font settings are mirrored from the host.
 
-## Review experience
+Authenticated routes in `plugin/index.js` serve an explicit asset allowlist and `/agent-xray/review`. Session/workspace roots come from `sessionQuery.readSession`, never from browser-supplied filesystem paths. `/agent-xray/changes` is a legacy explicit-lab smoke endpoint; normal panels do not use it.
 
-The default side panel starts with Change Story, a short sequence of outcomes whose entries open the exact diff. Split gives the reviewer more space alongside the host conversation. Max expands the inspection workspace. All three share selection and filters. The host conversation area in this demo is a placeholder.
+`plugin/dsh-adapter.js` projects validated DSH user messages, tool calls/results and per-turn changes into the review model. It never reads hidden reasoning. File-tool excerpts and exact turn comparisons have distinct range semantics. The same hunk can carry task, capability, module, risk and milestone relationships without duplication by perspective.
 
-Mission Control, Change Explorer, Architecture Map, and Journey share a selected hunk ID. Selecting an objective scopes the inspection to its changes. Selecting a module, story entry, or journey event navigates to its associated change. In a live integration, new events should preserve the current inspection unless the reviewer enables Follow Agent. Reviewing historical changes must be independent of agent execution.
+## Model and storage
 
-## Change model
+`core/model.js` normalizes snapshots and computes scoped groups/counts. `core/evidence.js` supplies labeled path heuristics. `core/dependencies.js` uses the TypeScript parser for static imports/exports and declaration locations. Dynamic imports, unsupported languages and unchanged dependencies are not a complete architecture analysis.
 
-Store each hunk once with its path, old and new ranges, diff lines, and stable identity within a change snapshot. A single file can have hunks tied to different objectives. Objective, business capability, architecture module, risk, and conversation milestone are views over hunk relationships.
+`plugin/workspace.js` reads bounded Git changes from the resolved workspace, including untracked files and metadata for binary/oversized files. It uses literal pathspecs, avoids following untracked symlinks outside the workspace, and preserves no-final-newline information.
 
-Store relationship evidence separately from the diff. Identify user requests, agent-declared objectives, and inferred relationships. Give each inference a rationale and a source reference. Verification records should reference an observed command execution, its result, and the snapshot it ran against. Pending verification should remain visible.
+`plugin/history-store.js` stores immutable snapshots under `$DSH_HOME/agent-xray/history`, defaulting to `~/.dsh/agent-xray/history`. Session IDs are hashed for paths. A temporary file plus atomic exclusive link prevents simultaneous writers replacing a published snapshot. Files are private to the host user. Snapshot records are plugin-created evidence; they are not a replacement for DSH's authoritative session log.
 
-## Proposed DeepSeek Harness integration
+## Review UI
 
-1. Validate the host's panel and maximized-view APIs, session event hooks, available identifiers, and permissions against a supported DSH version.
-2. Capture permitted session events and Git snapshots through a host adapter. Track ordering and deduplicate event replay. Preserve snapshot identity so changes can still be inspected after later edits.
-3. Parse Git diffs into hunks and connect requests, agent actions, modules, and verification evidence. Preserve uncertain or missing attribution.
-4. Feed a read-only review model to the panel. Keep workspace selection and filters local to the UI.
+`ui/state.js` separates inspection state from execution. Session/source-specific storage retains view, selection, filters, diff layout and scroll. Follow Agent starts off. Polling announces new activity while the reader's current snapshot remains stable; Catch up explicitly adopts it.
 
-The browser demo implements the review model with static sample data. Host API compatibility, live event capture, and dependency discovery remain open.
+`ui/render.js` presents distinct Story, Changes, Map and Journey surfaces using the same hunk identity. `ui/diff.js` aligns old/new rows, preserves patch semantics and escapes displayed code. Unknown attribution counts as zero objectives. Unlinked commands remain session evidence rather than becoming a green check on an unrelated diff.
 
-## First DSH integration
+Examples pass through the same model with explicit demo provenance and never become ordinary session activity. The runtime remains DSH-specific only at the adapter boundary; a future Claude adapter is outside this release.
 
-The first adapter registers a retained right-sidebar panel through DSH’s native panel registry and slot service and serves the existing review UI in an iframe. Host routes use Connection admission checks. The lab supplies a fixed repository through XRAY_TEST_REPOSITORY. A refresh reads actual Git hunks against HEAD.
+## Support boundaries
 
-This establishes plugin loading, authenticated host access, and Git inspection. Session-to-workspace resolution and agent event collection are still pending. Every sidebar instance currently inspects the configured test repository. Codespaces supplies the proposed interactive cloud environment, with GitHub Actions exercising a real DSH process on Ubuntu.
-
-The sidebar owns resizing, fullscreen, and retained mounting. The iframe mirrors the host’s semantic theme tokens and typography on load and on theme changes. Its layout responds to the sidebar width.
+Supported host contract: DSH 0.2.0-rc.2. Workspace preview: first 100 files, 512 KB source preview per file, 4 MiB Git command output, 10-second Git command timeout. Map rendering: first 40 nodes with a list alternative. Historical retention consumes local disk; there is no automatic deletion policy in this version. Generic commands lack a reliably established tested-snapshot relation, so exact test attribution stays unknown unless supplied by evidence.

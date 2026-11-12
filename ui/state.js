@@ -4,6 +4,7 @@ export const initialState = () => ({
   groupBy: "task",
   query: "",
   selected: null,
+  selectedLine: null,
   layout: "unified",
   follow: false,
   detail: false,
@@ -13,7 +14,12 @@ export const initialState = () => ({
 export function reduceReview(state, action) {
   switch (action.type) {
     case "select":
-      return { ...state, selected: action.id, detail: true };
+      return {
+        ...state,
+        selected: action.id,
+        selectedLine: null,
+        detail: true,
+      };
     case "view":
       return { ...state, view: action.view, detail: false };
     case "incoming":

@@ -126,7 +126,7 @@ export function apply(ctx) {
                   id: s.snapshotId,
                   time: s.capturedAt,
                   title: s.title,
-                  count: s.hunks.length,
+                  count: s.count,
                 })),
                 latestSnapshotId: current.snapshotId,
               });

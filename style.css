@@ -642,7 +642,7 @@ h1 {
 }
 .graph {
   display: block;
-  min-width: 500px;
+  min-width: 0;
   width: 100%;
 }
 .graph-edge {
@@ -859,7 +859,7 @@ footer p {
     font-size: 10px;
   }
   .graph {
-    min-width: 500px;
+    min-width: 0;
   }
   footer {
     padding: 12px 16px;
@@ -890,4 +890,32 @@ footer p {
   gap: 5px;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+.graph-edge.containment {
+  stroke-dasharray: 4 4;
+}
+.metadata-files {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.metadata-files summary {
+  overflow-wrap: anywhere;
+}
+.newline-note {
+  padding-left: 14px;
+  font: 9px system-ui;
+  color: var(--muted);
+}
+.action-progress {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.code-row[data-line-selected="true"] {
+  box-shadow: inset 3px 0 var(--accent);
+  background: var(--tint);
+}
+.code-row[data-code-line] {
+  cursor: pointer;
 }

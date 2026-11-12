@@ -145,3 +145,20 @@ test("slow live response cannot overwrite an explicitly selected example", async
   await expect(page.locator("#source")).toHaveValue("demo");
   await expect(page.locator(".story-group")).toHaveCount(3);
 });
+
+test("keyboard focus survives tabs, file drill-down and back", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 380, height: 900 });
+  await page.goto("/");
+  const tab = page.getByRole("tab", { name: "Changes", exact: true });
+  await tab.focus();
+  await page.keyboard.press("Enter");
+  await expect(tab).toBeFocused();
+  const row = page.locator(".file-row").first();
+  await row.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Back to changes")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".file-row.selected")).toBeFocused();
+});

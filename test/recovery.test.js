@@ -78,3 +78,45 @@ test("history is immutable and isolated across sessions after restart", async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+test("malformed and duplicate metadata does not break or regress a completed action", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-replay-"));
+  try {
+    const log = history("a", root);
+    log.events[3].data.meta.diffs.push(null);
+    log.events.push(log.events[2], log.events[3]);
+    const s = await readSessionReview(
+      { sessionQuery: { readSession: async () => log } },
+      "a",
+    );
+    assert.equal(s.hunks.length, 1);
+    assert.equal(s.events.find((e) => e.type === "action").status, "completed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+test("concurrent snapshot writers publish exactly one immutable value", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-race-"));
+  try {
+    const store = createHistoryStore(root);
+    const results = await Promise.all([
+      store.put({
+        sessionId: "a",
+        snapshotId: "s",
+        capturedAt: 1,
+        title: "first",
+      }),
+      store.put({
+        sessionId: "a",
+        snapshotId: "s",
+        capturedAt: 1,
+        title: "second",
+      }),
+    ]);
+    assert.equal(results.filter(Boolean).length, 1);
+    const first = await store.get("a", "s");
+    await store.put({ ...first, title: "changed" });
+    assert.equal((await store.get("a", "s")).title, first.title);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

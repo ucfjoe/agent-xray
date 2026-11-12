@@ -1,22 +1,60 @@
-import { mkdir, readFile, writeFile, rename, readdir } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  writeFile,
+  link,
+  unlink,
+  readdir,
+  stat,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 const key = (x) => createHash("sha256").update(x).digest("hex");
+async function exists(path) {
+  try {
+    await stat(path);
+    return true;
+  } catch (e) {
+    if (e.code === "ENOENT") return false;
+    throw e;
+  }
+}
+async function publish(path, value) {
+  const tmp = path + "." + randomUUID();
+  await writeFile(tmp, JSON.stringify(value), { mode: 0o600 });
+  try {
+    await link(tmp, path);
+    return true;
+  } catch (e) {
+    if (e.code !== "EEXIST") throw e;
+    return false;
+  } finally {
+    await unlink(tmp);
+  }
+}
 export function createHistoryStore(root) {
   return {
     async put(snapshot) {
       const dir = join(root, key(snapshot.sessionId));
       await mkdir(dir, { recursive: true, mode: 0o700 });
       const path = join(dir, key(snapshot.snapshotId) + ".json");
-      try {
-        await readFile(path);
-        return;
-      } catch (e) {
-        if (e.code !== "ENOENT") throw e;
+      const meta = path + ".meta";
+      const inserted = (await exists(path))
+        ? false
+        : await publish(path, snapshot);
+      if (!(await exists(meta))) {
+        const retained = inserted
+          ? snapshot
+          : JSON.parse(await readFile(path, "utf8"));
+        await publish(meta, {
+          sessionId: retained.sessionId,
+          snapshotId: retained.snapshotId,
+          capturedAt: retained.capturedAt,
+          title: retained.title,
+          count: retained.hunks?.length ?? 0,
+        });
       }
-      const tmp = path + "." + randomUUID();
-      await writeFile(tmp, JSON.stringify(snapshot), { mode: 0o600 });
-      await rename(tmp, path);
+      return inserted;
     },
     async list(sessionId) {
       const dir = join(root, key(sessionId));
@@ -28,7 +66,7 @@ export function createHistoryStore(root) {
         throw e;
       }
       const result = [];
-      for (const name of names.filter((n) => n.endsWith(".json"))) {
+      for (const name of names.filter((n) => n.endsWith(".meta"))) {
         const s = JSON.parse(await readFile(join(dir, name), "utf8"));
         if (s.sessionId === sessionId) result.push(s);
       }

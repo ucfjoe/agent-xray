@@ -33,7 +33,10 @@ export function parseDiff(diff) {
         verification: "Verification evidence unavailable.",
       };
       changes.push(current);
-    } else if (current && /^[ +\-]/.test(line)) {
+    } else if (
+      current &&
+      (/^[ +\-]/.test(line) || line.startsWith("\\ No newline"))
+    ) {
       current.lines.push(line);
     }
   }

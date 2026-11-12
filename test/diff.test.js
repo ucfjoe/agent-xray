@@ -25,3 +25,18 @@ test("untrusted code is escaped and excerpt numbers are not fabricated", () => {
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /·/);
 });
+import { parseDiff } from "../plugin/git.js";
+test("copy patch retains no-final-newline semantics and quotes unusual names", () => {
+  const raw =
+    "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n";
+  const parsed = parseDiff(raw)[0];
+  const patch = patchText({
+    ...parsed,
+    path: "tab\tname.js",
+    oldStart: 1,
+    newStart: 1,
+  });
+  assert.equal(patch.split("\\ No newline at end of file").length - 1, 2);
+  assert.match(patch, /@@ -1,1 \+1,1 @@/);
+  assert.ok(patch.includes('"a/tab\\tname.js"'));
+});

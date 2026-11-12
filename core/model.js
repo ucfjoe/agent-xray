@@ -80,12 +80,23 @@ export function projectReview(
     }
   }
   const ids = new Set(hunks.map((h) => h.id));
+  const fileOnly = objectiveId
+    ? []
+    : snapshot.files.filter(
+        (f) =>
+          !snapshot.hunks.some((h) => h.path === f.path) &&
+          (!query || f.path.toLowerCase().includes(query.toLowerCase())),
+      );
   return {
+    fileOnly,
     hunks,
     groups: [...groups].map(([name, hunks]) => ({ name, hunks })),
     counts: {
       hunks: hunks.length,
-      files: new Set(hunks.map((h) => h.path)).size,
+      files: new Set([
+        ...hunks.map((h) => h.path),
+        ...fileOnly.map((f) => f.path),
+      ]).size,
       objectives: new Set(
         snapshot.relationships
           .filter(

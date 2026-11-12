@@ -25,6 +25,13 @@ function save() {
 function draw() {
   const focus = document.activeElement;
   const focusId = focus?.id;
+  const focusAttr = [
+    "data-select",
+    "data-view",
+    "data-layout",
+    "data-action",
+  ].find((attr) => focus?.hasAttribute(attr));
+  const focusValue = focusAttr ? focus.getAttribute(focusAttr) : null;
   const caret = focus?.selectionStart;
   const positions =
     state.scroll?.[state.view + ":" + (state.selected ?? "")] ??
@@ -51,6 +58,20 @@ function draw() {
     node?.focus({ preventScroll: true });
     if (node?.type === "search" && caret !== null)
       node.setSelectionRange(caret, caret);
+  }
+  if (!focusId && focusAttr) {
+    const target = root.querySelector(
+      `[${focusAttr}="${CSS.escape(focusValue)}"]`,
+    );
+    if (target?.getClientRects().length) target.focus({ preventScroll: true });
+    else {
+      const back = root.querySelector(".back-button");
+      if (back?.getClientRects().length) back.focus({ preventScroll: true });
+      else if (state.selected)
+        root
+          .querySelector(`[data-select="${CSS.escape(state.selected)}"]`)
+          ?.focus({ preventScroll: true });
+    }
   }
   save();
 }
@@ -119,6 +140,18 @@ async function load({ background = false } = {}) {
   }
 }
 root.addEventListener("click", async (event) => {
+  const line = event.target.closest("[data-code-line]");
+  if (line) {
+    dispatch({
+      patch: {
+        selectedLine: {
+          line: Number(line.dataset.codeLine),
+          side: line.dataset.codeSide,
+        },
+      },
+    });
+    return;
+  }
   const selected = event.target.closest("[data-select]");
   if (selected) {
     dispatch({ type: "select", id: selected.dataset.select });
@@ -148,8 +181,21 @@ root.addEventListener("click", async (event) => {
     apply(pending);
   }
   if (action === "fit") {
+    dispatch({ patch: { mapZoom: 100 } });
     root.querySelector(".graph-scroll")?.scrollTo({ left: 0, top: 0 });
   }
+  if (action === "zoom-in" || action === "zoom-out")
+    dispatch({
+      patch: {
+        mapZoom: Math.max(
+          60,
+          Math.min(
+            240,
+            (state.mapZoom ?? 100) + (action === "zoom-in" ? 20 : -20),
+          ),
+        ),
+      },
+    });
   if (action === "next" || action === "previous") {
     const p = projectReview(snapshot, state);
     const at = p.hunks.findIndex((h) => h.id === state.selected);
@@ -170,6 +216,13 @@ root.addEventListener("click", async (event) => {
   }
 });
 root.addEventListener("keydown", (event) => {
+  if (
+    event.target.matches("[data-code-line]") &&
+    ["Enter", " "].includes(event.key)
+  ) {
+    event.preventDefault();
+    event.target.click();
+  }
   if (
     event.target.matches(".graph-node") &&
     ["Enter", " "].includes(event.key)

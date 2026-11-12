@@ -103,6 +103,12 @@ function map(snapshot, p, state) {
   const deps = (snapshot.dependencies ?? []).filter(
     (d) => names.includes(d.from) || names.includes(d.to),
   );
+  for (const h of p.hunks.filter((h) => h.symbol))
+    deps.push({
+      from: relations.find((r) => r.hunkId === h.id)?.target ?? h.path,
+      to: h.path + "::" + h.symbol,
+      kind: "containment",
+    });
   const nodes = [
     ...new Set([...names, ...deps.flatMap((d) => [d.from, d.to])]),
   ].slice(0, 40);
@@ -116,25 +122,26 @@ function map(snapshot, p, state) {
   const edges = deps.filter(
     (d) => positions.has(d.from) && positions.has(d.to),
   );
-  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.length} dependencies</span><button data-action="fit">Fit map</button></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" viewBox="0 0 550 ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
+  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%" viewBox="0 0 550 ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
     .map((d) => {
       const a = positions.get(d.from),
         b = positions.get(d.to);
-      return `<path class="graph-edge" d="M${a.x + 110},${a.y + 50} C${a.x + 110},${a.y + 85} ${b.x + 110},${b.y - 25} ${b.x + 110},${b.y}" marker-end="url(#arrow)"/>`;
+      return `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""}" d="M${a.x + 110},${a.y + 50} C${a.x + 110},${a.y + 85} ${b.x + 110},${b.y - 25} ${b.x + 110},${b.y}" marker-end="url(#arrow)"/>`;
     })
     .join("")}${nodes
     .map((n) => {
       const pos = positions.get(n);
       const hunks = p.hunks.filter(
         (h) =>
-          (relations.find((r) => r.hunkId === h.id)?.target ?? h.path) === n,
+          (relations.find((r) => r.hunkId === h.id)?.target ?? h.path) === n ||
+          (h.symbol && h.path + "::" + h.symbol === n),
       );
       const selected = hunks.some((h) => h.id === state.selected);
       return `<g class="graph-node ${selected ? "selected" : ""}" ${hunks.length ? `data-select="${e(hunks[0].id)}" tabindex="0" role="button" aria-label="Inspect ${e(n)}"` : ""} transform="translate(${pos.x},${pos.y})"><rect width="230" height="66" rx="9"/><text x="14" y="26">${e(n.length > 28 ? "…" + n.slice(-27) : n)}</text><text class="node-subtitle" x="14" y="48">${hunks.length ? `${hunks.length} changes` : "Dependency"}</text></g>`;
     })
     .join(
       "",
-    )}</svg></div><p class="map-note">${edges.length ? "Arrows show " + (snapshot.source === "demo" ? "illustrative" : "observed static") + " dependencies." : "No dependency edges available. Nodes show changed files or directory groups, not an inferred dependency graph."}</p><details class="map-list"><summary>Browse map as a list</summary>${p.hunks.map((h) => fileRow(h, state)).join("")}</details>`;
+    )}</svg></div><p class="map-note">Solid edges: dependencies. Dashed edges: symbol containment. Up to 40 nodes; use the list for all changes. ${edges.length ? "Arrows show " + (snapshot.source === "demo" ? "illustrative" : "observed static") + " dependencies." : "No dependency edges available. Nodes show changed files or directory groups, not an inferred dependency graph."}</p><details class="map-list"><summary>Browse map as a list</summary>${p.hunks.map((h) => fileRow(h, state)).join("")}</details>`;
 }
 function empty(title, body) {
   return `<div class="empty"><span class="empty-symbol">◇</span><h2>${e(title)}</h2><p>${e(body)}</p></div>`;
@@ -148,8 +155,8 @@ function detail(snapshot, h, state, p) {
   );
   const action = snapshot.events.find((ev) => ev.id === h.eventId);
   const index = p.hunks.findIndex((x) => x.id === h.id);
-  return `<section class="inspector" aria-label="Change inspector"><div class="inspector-title"><button class="back-button" data-action="back" aria-label="Back to changes">←</button><span class="file-icon">⌘</span><div class="file-label"><h2>${e(basename(h.path))}</h2><small title="${e(h.path)}">${e(dir(h.path) || "Repository root")}</small></div>${delta(h)}</div><div class="diff-toolbar"><span>${h.rangeKind === "excerpt" ? "Recorded excerpt · offsets unavailable" : `Lines ${h.newStart ?? 1}–${(h.newStart ?? 1) + Math.max(0, h.lines.filter((l) => l[0] !== "-").length - 1)}`}</span><div class="segmented"><button data-layout="unified" aria-pressed="${state.layout === "unified"}">Unified</button><button data-layout="split" aria-pressed="${state.layout === "split"}">Split</button></div></div><div class="code-scroll" tabindex="0" aria-label="Code diff">${renderDiff(h, state.layout)}</div><div class="hunk-controls"><span>Change ${index + 1} of ${p.hunks.length}</span><button data-action="previous" aria-label="Previous change" ${index <= 0 ? "disabled" : ""}>↑</button><button data-action="next" aria-label="Next change" ${index >= p.hunks.length - 1 ? "disabled" : ""}>↓</button><button data-action="copy">${h.rangeKind === "excerpt" ? "Copy excerpt" : "Copy patch"}</button></div><details class="context-card" open><summary><span>◈</span> Why this changed</summary>${
-    relationships.length
+  return `<section class="inspector" aria-label="Change inspector"><div class="inspector-title"><button class="back-button" data-action="back" aria-label="Back to changes">←</button><span class="file-icon">⌘</span><div class="file-label"><h2>${e(basename(h.path))}</h2><small title="${e(h.path)}">${e(dir(h.path) || "Repository root")}</small></div>${delta(h)}</div><div class="diff-toolbar"><span>${h.rangeKind === "excerpt" ? "Recorded excerpt · offsets unavailable" : `Lines ${h.newStart ?? 1}–${(h.newStart ?? 1) + Math.max(0, h.lines.filter((l) => /^[ +]/.test(l)).length - 1)}`}</span><div class="segmented"><button data-layout="unified" aria-pressed="${state.layout === "unified"}">Unified</button><button data-layout="split" aria-pressed="${state.layout === "split"}">Split</button></div></div><div class="code-scroll" tabindex="0" aria-label="Code diff">${renderDiff(h, state.layout, state.selectedLine)}</div><div class="hunk-controls"><span>Change ${index + 1} of ${p.hunks.length}</span><button data-action="previous" aria-label="Previous change" ${index <= 0 ? "disabled" : ""}>↑</button><button data-action="next" aria-label="Next change" ${index >= p.hunks.length - 1 ? "disabled" : ""}>↓</button><button data-action="copy">${h.rangeKind === "excerpt" ? "Copy excerpt" : "Copy patch"}</button></div><details class="context-card" open><summary><span>◈</span> Why this changed</summary>${
+    relationships.some((r) => r.kind === "task")
       ? relationships
           .filter((r) => r.kind === "task")
           .map(
@@ -180,11 +187,15 @@ export function render(
   const selected = p.hunks.find((h) => h.id === state.selected);
   const views = {
     story: () => story(snapshot, p, state),
-    changes: () => explorer(p, state),
+    changes: () =>
+      explorer(p, state) +
+      (p.fileOnly.length
+        ? `<section class="file-group metadata-files"><h2>Other changed files</h2>${p.fileOnly.map((f) => `<details><summary>${e(f.path)}</summary><p>${e(f.kind ?? "No text difference")} · Text preview unavailable for this file.</p></details>`).join("")}</section>`
+        : ""),
     map: () => map(snapshot, p, state),
     journey: () => journey(snapshot, p, state),
   };
-  return `<header class="app-header"><div class="brand"><span class="brand-mark">⌁</span><strong>Agent X-Ray</strong></div><div class="header-actions"><select id="source" aria-label="Review source"><option value="session" ${source === "session" ? "selected" : ""}>Session</option><option value="workspace" ${source === "workspace" ? "selected" : ""}>Workspace</option><option value="demo" ${source === "demo" ? "selected" : ""}>Examples</option></select><button data-action="refresh" class="icon-button" aria-label="Refresh review">↻</button></div></header>${source === "demo" ? `<div class="demo-strip"><span>EXAMPLE</span><select id="scenario" aria-label="Example scenario">${scenarios.map((s) => `<option value="${e(s.id)}" ${s.id === scenario ? "selected" : ""}>${e(s.title)}</option>`).join("")}</select><small>Fictional data</small></div>` : ""}<section class="overview"><div class="eyebrow"><span>${source === "demo" ? "DESIGN SANDBOX" : snapshot.scope === "workspace" ? "WORKSPACE OVERVIEW" : "SESSION OVERVIEW"}</span><span class="activity"><i></i>${e(snapshot.activity ?? "Review")}</span></div><h1>${e(snapshot.goal ?? snapshot.title)}</h1><div class="summary-metrics"><span><b>${p.counts.files}</b> files</span><span><b>${p.counts.hunks}</b> changes</span><span><b>${p.counts.objectives}</b> objectives</span>${delta(p.counts)}</div></section>${error ? `<div class="notice error" role="alert">${e(error)}</div>` : ""}${pending ? `<button class="update-banner" data-action="catchup">New activity available <span>Catch up →</span></button>` : ""}<div class="view-bar" role="tablist" aria-label="Review views">${Object.keys(
+  return `<header class="app-header"><div class="brand"><span class="brand-mark">⌁</span><strong>Agent X-Ray</strong></div><div class="header-actions"><select id="source" aria-label="Review source"><option value="session" ${source === "session" ? "selected" : ""}>Session</option><option value="workspace" ${source === "workspace" ? "selected" : ""}>Workspace</option><option value="demo" ${source === "demo" ? "selected" : ""}>Examples</option></select><button data-action="refresh" class="icon-button" aria-label="Refresh review">↻</button></div></header>${source === "demo" ? `<div class="demo-strip"><span>EXAMPLE</span><select id="scenario" aria-label="Example scenario">${scenarios.map((s) => `<option value="${e(s.id)}" ${s.id === scenario ? "selected" : ""}>${e(s.title)}</option>`).join("")}</select><small>Fictional data</small></div>` : ""}<section class="overview"><div class="eyebrow"><span>${source === "demo" ? "DESIGN SANDBOX" : snapshot.scope === "workspace" ? "WORKSPACE OVERVIEW" : "SESSION OVERVIEW"}</span><span class="activity"><i></i>${e(snapshot.activity ?? "Review")}</span></div><h1>${e(snapshot.goal ?? snapshot.title)}</h1><div class="summary-metrics"><span><b>${p.counts.files}</b> files</span><span><b>${p.counts.hunks}</b> changes</span><span><b>${p.counts.objectives}</b> objectives</span>${delta(p.counts)}</div>${snapshot.events.some((ev) => ev.type === "action") ? `<p class="action-progress">${snapshot.events.filter((ev) => ev.type === "action" && ev.status === "completed").length} of ${snapshot.events.filter((ev) => ev.type === "action").length} recorded actions completed · ${snapshot.events.filter((ev) => ev.status === "failed").length} failed</p>` : ""}</section>${error ? `<div class="notice error" role="alert">${e(error)}</div>` : ""}${pending ? `<button class="update-banner" data-action="catchup">New activity available <span>Catch up →</span></button>` : ""}<div class="view-bar" role="tablist" aria-label="Review views">${Object.keys(
     views,
   )
     .map(
@@ -193,5 +204,5 @@ export function render(
     )
     .join(
       "",
-    )}</div><div class="filter-bar"><input id="search" type="search" placeholder="Find a file or symbol…" aria-label="Find changed files" value="${e(state.query)}"><select id="objective" aria-label="Filter objective"><option value="">All objectives</option>${snapshot.objectives.map((o) => `<option value="${e(o.id)}" ${state.objectiveId === o.id ? "selected" : ""}>${e(o.title)}</option>`).join("")}</select></div>${source === "session" ? `<div class="history-bar"><select id="history" aria-label="Snapshot"><option value="">Latest observed</option>${(history ?? []).map((h) => `<option value="${e(h.id)}" ${state.historyId === h.id ? "selected" : ""}>${new Date(h.time).toLocaleString()} · ${h.count} changes</option>`).join("")}</select><button data-action="follow" aria-pressed="${state.follow}">◉ Follow agent</button></div>` : ""}<div class="review-body ${state.detail && selected ? "show-detail" : ""}" data-view="${state.view}"><section class="navigator" aria-label="${e(state.view)} view">${views[state.view]()}</section>${detail(snapshot, selected, state, p)}</div>${snapshot.checks.length && source !== "demo" ? `<details class="session-commands"><summary>Session command evidence <span>${snapshot.checks.length}</span></summary>${snapshot.checks.map((c) => `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`).join("")}</details>` : ""}<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Recorded session evidence"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p></details></footer>`;
+    )}</div><div class="filter-bar"><input id="search" type="search" placeholder="Find a file or symbol…" aria-label="Find changed files" value="${e(state.query)}"><select id="objective" aria-label="Filter objective"><option value="">All objectives</option>${snapshot.objectives.map((o) => `<option value="${e(o.id)}" ${state.objectiveId === o.id ? "selected" : ""}>${e(o.title)}</option>`).join("")}</select></div>${source === "session" ? `<div class="history-bar"><select id="history" aria-label="Snapshot"><option value="">Latest observed</option>${(history ?? []).map((h) => `<option value="${e(h.id)}" ${state.historyId === h.id ? "selected" : ""}>${new Date(h.time).toLocaleString()} · ${h.count} changes</option>`).join("")}</select><button data-action="follow" aria-pressed="${state.follow}">◉ Follow agent</button></div>` : ""}<div class="review-body ${state.detail && selected ? "show-detail" : ""}" data-view="${state.view}"><section class="navigator" aria-label="${e(state.view)} view">${views[state.view]()}</section>${detail(snapshot, selected, state, p)}</div>${snapshot.checks.length && source !== "demo" ? `<details class="session-commands"><summary>Session command evidence <span>${snapshot.checks.length}</span></summary>${snapshot.checks.map((c) => `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`).join("")}</details>` : ""}<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Recorded session evidence"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p>${(snapshot.diagnostics ?? []).map((d) => `<p>${e(d.path)}: ${e(d.reason)}</p>`).join("")}</details></footer>`;
 }

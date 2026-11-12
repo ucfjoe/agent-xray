@@ -1,16 +1,14 @@
 {
   "name": "Agent X-Ray DSH lab",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:5.2.5-24-bookworm",
-  "forwardPorts": [
-    3080
-  ],
+  "forwardPorts": [3080],
   "portsAttributes": {
     "3080": {
       "label": "DeepSeek Harness",
       "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "npm install --global @deepseek-ai/dsh@0.2.0-rc.2 && npm run lab:setup",
+  "postCreateCommand": "npm install --global @deepseek-ai/dsh@0.2.0-rc.2 && npm ci && npm run lab:setup",
   "postStartCommand": "bash -c 'nohup npm run lab:start > .lab/server.log 2>&1 < /dev/null &'",
   "features": {
     "ghcr.io/devcontainers/features/sshd:1": {}

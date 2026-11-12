@@ -65,3 +65,34 @@ test("100-file cap is explicit in an unborn repository", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+test("Git magic-looking names are literal paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-literal-"));
+  const git = (...args) => execFileSync("git", ["-C", root, ...args]);
+  try {
+    git("init", "-b", "main");
+    for (const p of [":(glob)*.js", "other.js"])
+      await writeFile(join(root, p), "old\n");
+    git("add", ".");
+    git(
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "fixture",
+    );
+    for (const p of [":(glob)*.js", "other.js"])
+      await writeFile(join(root, p), p + "\n");
+    const s = await readWorkspaceReview({
+      root,
+      sessionId: "a",
+      workspaceId: "w",
+    });
+    assert.equal(s.hunks.filter((h) => h.path === ":(glob)*.js").length, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -1,6 +1,6 @@
 {
   "name": "dsh-agent-xray",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "plugin/index.js",
@@ -34,7 +34,8 @@
     "test": "node --test test/*.test.js",
     "lab:setup": "node scripts/setup-lab.js",
     "lab:start": "node scripts/start-lab.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "format": "prettier --write app.js index.html style.css core ui plugin test scripts playwright.config.js"
   },
   "engines": {
     "node": ">=22.19.0"

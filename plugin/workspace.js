@@ -13,7 +13,13 @@ export async function readWorkspaceReview(context) {
   const root = await realpath(context.root);
   const options = { cwd: root, timeout: 10000, maxBuffer: 4 * 1024 * 1024 };
   const git = async (args) =>
-    (await run("git", ["-c", "core.quotePath=false", ...args], options)).stdout;
+    (
+      await run(
+        "git",
+        ["--literal-pathspecs", "-c", "core.quotePath=false", ...args],
+        options,
+      )
+    ).stdout;
   let base = "HEAD";
   try {
     await git(["rev-parse", "--verify", "HEAD"]);
@@ -107,7 +113,9 @@ export async function readWorkspaceReview(context) {
         oldStart: h.oldLine,
         newStart: h.newLine,
         rangeKind: "file",
-        lines: h.lines.filter((l) => /^[ +\-]/.test(l)),
+        lines: h.lines.filter(
+          (l) => /^[ +\-]/.test(l) || l.startsWith("\\ No newline"),
+        ),
       });
   }
   if (names.length > 100)

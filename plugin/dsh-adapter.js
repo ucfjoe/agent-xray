@@ -32,7 +32,13 @@ export async function readSessionReview(
   if (!cwd || !isAbsolute(cwd))
     throw Error("This session has no workspace directory.");
   const root = await realpath(cwd);
-  const raw = log.events
+  const raw = [
+    ...new Map(
+      log.events
+        .filter((e) => e && Number.isSafeInteger(e.seq))
+        .map((e) => [e.seq, e]),
+    ).values(),
+  ]
     .filter((e) => e.seq <= throughSeq)
     .sort((a, b) => a.seq - b.seq);
   const snapshotId = digest([sessionId, raw.at(-1)?.seq ?? -1]);
@@ -88,7 +94,12 @@ export async function readSessionReview(
       rationale: "Directory containment, not a dependency claim.",
     });
   }
-  for (const e of raw) {
+  let previewBytes = 0;
+  if (raw.length > 10000)
+    model.notices.push(
+      "Showing the latest 10,000 history events. Earlier activity is omitted from this preview.",
+    );
+  for (const e of raw.slice(-10000)) {
     if (signal?.aborted) throw Error("Request cancelled");
     const d = e.data ?? {};
     if (e.type === "turn/start") {
@@ -128,7 +139,13 @@ export async function readSessionReview(
     if (e.type === "tool/call") {
       let args = {};
       try {
-        args = JSON.parse(d.arguments);
+        const parsed = JSON.parse(
+          typeof d.arguments === "string" && d.arguments.length <= 128000
+            ? d.arguments
+            : "{}",
+        );
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+          args = parsed;
       } catch {}
       const call = { ...d, args, eventId: id(e), objectiveId: objective?.id };
       calls.set(d.callId, call);
@@ -154,13 +171,23 @@ export async function readSessionReview(
       const diffs = Array.isArray(d.meta?.diffs) ? d.meta.diffs : [];
       for (const [i, diff] of diffs.entries()) {
         if (
+          !diff ||
           typeof diff.path !== "string" ||
           typeof diff.newText !== "string" ||
           (diff.oldText !== null && typeof diff.oldText !== "string")
-        )
+        ) {
+          model.notices.push("Malformed edit metadata was omitted.");
           continue;
+        }
         if (diff.newText.length + (diff.oldText?.length ?? 0) > 512000) {
           model.notices.push("A recorded edit exceeded the preview limit.");
+          continue;
+        }
+        previewBytes += diff.newText.length + (diff.oldText?.length ?? 0);
+        if (previewBytes > 4000000 || model.hunks.length >= 1000) {
+          model.notices.push(
+            "Recorded edit preview limit reached; additional edits are omitted.",
+          );
           continue;
         }
         const path = isAbsolute(diff.path)
@@ -188,7 +215,9 @@ export async function readSessionReview(
             id: id(e) + ":" + i + ":" + j,
             path,
             title: call.name + " " + path.split("/").at(-1),
-            lines: p.lines.filter((l) => /^[ +\-]/.test(l)),
+            lines: p.lines.filter(
+              (l) => /^[ +\-]/.test(l) || l.startsWith("\\ No newline"),
+            ),
             oldStart: p.oldStart,
             newStart: p.newStart,
             rangeKind: "excerpt",
@@ -237,6 +266,10 @@ export async function readSessionReview(
         objectiveId: objective?.id,
       };
       for (let i = 0; i < Math.min(summary.files.length, 100); i++) {
+        if (model.hunks.length >= 1000 || previewBytes > 4000000) {
+          model.notices.push("Turn comparison preview limit reached.");
+          break;
+        }
         const diff = await services.workspaceChanges.diff(
           sessionId,
           e.seq,
@@ -249,6 +282,11 @@ export async function readSessionReview(
           continue;
         model.files.push({ id: path, path, kind: diff.kind });
         if (diff.kind !== "text") continue;
+        previewBytes += JSON.stringify(diff).length;
+        if (previewBytes > 4000000) {
+          model.notices.push("Turn comparison preview limit reached.");
+          break;
+        }
         for (const [j, p] of diff.hunks.entries()) {
           const h = {
             id: id(e) + ":" + i + ":" + j,
