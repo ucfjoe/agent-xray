@@ -29,7 +29,7 @@ try {
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.ok(result.changes.some((change) => change.path === "greet.js"));
-  for (const asset of ["index.html", "app.js", "style.css"]) {
+  for (const asset of ["index.html", "app.js", "examples.js", "style.css"]) {
     assert.equal((await fetch(base + "/agent-xray/" + asset, { headers })).status, 200);
   }
   assert.equal((await fetch(base + "/agent-xray/changes", { headers: { ...headers, origin: "https://example.invalid" } })).status, 403);

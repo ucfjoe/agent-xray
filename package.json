@@ -5,7 +5,7 @@
   "type": "module",
   "main": "plugin/index.js",
   "exports": { ".": "./plugin/index.js", "./client": "./plugin/client.js", "./package.json": "./package.json" },
-  "files": ["plugin", "index.html", "app.js", "style.css", "cordis.patch.yml"],
+  "files": ["plugin", "index.html", "app.js", "examples.js", "style.css", "cordis.patch.yml"],
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": { "platform": "web", "inject": ["@deepseek-ai/dsh-client-runtime"] }

@@ -5,6 +5,7 @@ export const name = "agent-xray";
 export const inject = ["webServer"];
 const assets = new Map([
   ["/agent-xray/index.html", ["../index.html", "text/html"]],
+  ["/agent-xray/examples.js", ["../examples.js", "text/javascript"]],
   ["/agent-xray/app.js", ["../app.js", "text/javascript"]],
   ["/agent-xray/style.css", ["../style.css", "text/css"]],
 ]);
