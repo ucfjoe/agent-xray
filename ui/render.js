@@ -1,3 +1,4 @@
+import { impactFigure, traceFigure, layoutGraph } from "./figures.js";
 import { projectReview } from "../core/model.js";
 import { escape as e, renderDiff } from "./diff.js";
 const icons = { story: "≋", changes: "±", map: "◇", journey: "↳" };
@@ -24,6 +25,7 @@ function story(snapshot, p, state) {
       "Recorded edits will appear here. You can inspect current Git changes in Workspace, or explore an example from the source menu.",
     );
   return (
+    impactFigure(snapshot, p.hunks) +
     `<div class="section-heading"><span>CHANGE STORY</span><span>${p.groups.length} groups</span></div>` +
     p.groups
       .map(
@@ -112,21 +114,19 @@ function map(snapshot, p, state) {
   const nodes = [
     ...new Set([...names, ...deps.flatMap((d) => [d.from, d.to])]),
   ].slice(0, 40);
-  const height = Math.max(200, Math.ceil(nodes.length / 2) * 110 + 30);
-  const positions = new Map(
-    nodes.map((n, i) => [
-      n,
-      { x: i % 2 ? 290 : 20, y: 30 + Math.floor(i / 2) * 110 },
-    ]),
+  const { positions, width, height } = layoutGraph(
+    nodes,
+    deps,
+    globalThis.innerWidth < 760,
   );
   const edges = deps.filter(
     (d) => positions.has(d.from) && positions.has(d.to),
   );
-  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%" viewBox="0 0 550 ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
+  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
     .map((d) => {
       const a = positions.get(d.from),
         b = positions.get(d.to);
-      return `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""}" d="M${a.x + 110},${a.y + 50} C${a.x + 110},${a.y + 85} ${b.x + 110},${b.y - 25} ${b.x + 110},${b.y}" marker-end="url(#arrow)"/>`;
+      return `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""}" d="${a.x === b.x ? `M${a.x + 115},${a.y + 66} C${a.x + 260},${a.y + 85} ${b.x + 260},${b.y - 20} ${b.x + 115},${b.y}` : `M${a.x + 230},${a.y + 33} C${a.x + 250},${a.y + 33} ${b.x - 20},${b.y + 33} ${b.x},${b.y + 33}`}" marker-end="url(#arrow)"/>`;
     })
     .join("")}${nodes
     .map((n) => {
@@ -155,7 +155,7 @@ function detail(snapshot, h, state, p) {
   );
   const action = snapshot.events.find((ev) => ev.id === h.eventId);
   const index = p.hunks.findIndex((x) => x.id === h.id);
-  return `<section class="inspector" aria-label="Change inspector"><div class="inspector-title"><button class="back-button" data-action="back" aria-label="Back to changes">←</button><span class="file-icon">⌘</span><div class="file-label"><h2>${e(basename(h.path))}</h2><small title="${e(h.path)}">${e(dir(h.path) || "Repository root")}</small></div>${delta(h)}</div><div class="diff-toolbar"><span>${h.rangeKind === "excerpt" ? "Recorded excerpt · offsets unavailable" : `Lines ${h.newStart ?? 1}–${(h.newStart ?? 1) + Math.max(0, h.lines.filter((l) => /^[ +]/.test(l)).length - 1)}`}</span><div class="segmented"><button data-layout="unified" aria-pressed="${state.layout === "unified"}">Unified</button><button data-layout="split" aria-pressed="${state.layout === "split"}">Split</button></div></div><div class="code-scroll" tabindex="0" aria-label="Code diff">${renderDiff(h, state.layout, state.selectedLine)}</div><div class="hunk-controls"><span>Change ${index + 1} of ${p.hunks.length}</span><button data-action="previous" aria-label="Previous change" ${index <= 0 ? "disabled" : ""}>↑</button><button data-action="next" aria-label="Next change" ${index >= p.hunks.length - 1 ? "disabled" : ""}>↓</button><button data-action="copy">${h.rangeKind === "excerpt" ? "Copy excerpt" : "Copy patch"}</button></div><details class="context-card" open><summary><span>◈</span> Why this changed</summary>${
+  return `<section class="inspector" aria-label="Change inspector"><div class="inspector-title"><button class="back-button" data-action="back" aria-label="Back to changes">←</button><span class="file-icon">⌘</span><div class="file-label"><h2>${e(basename(h.path))}</h2><small title="${e(h.path)}">${e(dir(h.path) || "Repository root")}</small></div>${delta(h)}</div>${traceFigure(snapshot, h)}<div class="diff-toolbar"><span>${h.rangeKind === "excerpt" ? "Recorded excerpt · offsets unavailable" : `Lines ${h.newStart ?? 1}–${(h.newStart ?? 1) + Math.max(0, h.lines.filter((l) => /^[ +]/.test(l)).length - 1)}`}</span><div class="segmented"><button data-layout="unified" aria-pressed="${state.layout === "unified"}">Unified</button><button data-layout="split" aria-pressed="${state.layout === "split"}">Split</button></div></div><div class="code-scroll" tabindex="0" aria-label="Code diff">${renderDiff(h, state.layout, state.selectedLine)}</div><div class="hunk-controls"><span>Change ${index + 1} of ${p.hunks.length}</span><button data-action="previous" aria-label="Previous change" ${index <= 0 ? "disabled" : ""}>↑</button><button data-action="next" aria-label="Next change" ${index >= p.hunks.length - 1 ? "disabled" : ""}>↓</button><button data-action="copy">${h.rangeKind === "excerpt" ? "Copy excerpt" : "Copy patch"}</button></div><details class="context-card" open><summary><span>◈</span> Why this changed</summary>${
     relationships.some((r) => r.kind === "task")
       ? relationships
           .filter((r) => r.kind === "task")

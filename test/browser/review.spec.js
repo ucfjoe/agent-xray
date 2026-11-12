@@ -216,3 +216,37 @@ test("100 changed files remain searchable without document overflow", async ({
     ),
   ).toBe(true);
 });
+
+test("figures show real relationships and drive the shared selection", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await expect(
+    page.getByRole("img", { name: "Changed lines by file" }),
+  ).toBeVisible();
+  await page.locator(".impact-row").first().click();
+  await expect(page.locator(".trace-figure")).toContainText("Evidence trail");
+  await page.locator('[data-action="trace-action"]').click();
+  await expect(
+    page.getByRole("tab", { name: "Journey", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Map", exact: true }).click();
+  await expect(page.locator(".graph-edge").first()).toBeVisible();
+  await page.getByLabel("Zoom in").click();
+  await expect(page.locator(".graph")).toHaveAttribute("style", "width:120%");
+  await page.getByRole("button", { name: "Fit map", exact: true }).click();
+  await expect(page.locator(".graph")).toHaveAttribute("style", "width:100%");
+  await page.screenshot({
+    path: "test-results/diagrams-expanded.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 380, height: 1000 });
+  await page.getByRole("tab", { name: "Story", exact: true }).click();
+  await page.locator(".file-row").first().click();
+  await expect(page.locator(".trace-figure")).toBeVisible();
+  await page.screenshot({
+    path: "test-results/diagrams-sidebar.png",
+    fullPage: true,
+  });
+});

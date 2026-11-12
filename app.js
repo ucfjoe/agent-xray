@@ -168,6 +168,30 @@ root.addEventListener("click", async (event) => {
     return;
   }
   const action = event.target.closest("[data-action]")?.dataset.action;
+  if (action?.startsWith("trace-")) {
+    const h = snapshot.hunks.find((h) => h.id === state.selected);
+    if (action === "trace-intent") {
+      const task = snapshot.relationships.find(
+        (r) => r.hunkId === h?.id && r.kind === "task",
+      );
+      dispatch({
+        patch: {
+          view: "story",
+          objectiveId: task?.target ?? "",
+          detail: false,
+        },
+      });
+    }
+    if (action === "trace-action") dispatch({ type: "view", view: "journey" });
+    if (action === "trace-code") root.querySelector(".code-scroll")?.focus();
+    if (action === "trace-check") {
+      const node = root.querySelector(".context-card:last-child");
+      if (node) {
+        node.open = true;
+        node.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }
   if (action === "refresh") {
     await load();
   }
@@ -224,7 +248,7 @@ root.addEventListener("keydown", (event) => {
     event.target.click();
   }
   if (
-    event.target.matches(".graph-node") &&
+    event.target.matches(".graph-node,.impact-row") &&
     ["Enter", " "].includes(event.key)
   ) {
     event.preventDefault();
