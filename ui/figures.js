@@ -1,3 +1,4 @@
+import { checksForHunk } from "../core/verification.js";
 import { escape as e } from "./diff.js";
 export function impactFigure(snapshot, hunks) {
   const files = new Map();
@@ -33,7 +34,7 @@ export function traceFigure(snapshot, hunk) {
   );
   const objective = snapshot.objectives.find((o) => o.id === task?.target);
   const action = snapshot.events.find((ev) => ev.id === hunk.eventId);
-  const check = snapshot.checks.find((c) => c.hunkIds?.includes(hunk.id));
+  const check = checksForHunk(snapshot, hunk)[0];
   const nodes = [
     {
       label: "Intent",
@@ -62,17 +63,20 @@ export function traceFigure(snapshot, hunk) {
     {
       label: "Verification",
       icon: "✓",
-      title: check?.status ?? "Not established",
+      title:
+        check?.status === "not verified"
+          ? "Not verified"
+          : (check?.status ?? "Not established"),
       source:
-        check?.provenance === "demo"
+        check?.binding === "illustrative"
           ? "Illustrative result"
           : check
-            ? "Linked evidence"
+            ? "Context only · not verified"
             : "No exact-change proof",
       action: "trace-check",
     },
   ];
-  return `<figure class="trace-figure"><figcaption>Evidence trail <span>${snapshot.source === "demo" ? "Example relationships" : "What connects this change"}</span></figcaption><div class="trace-grid">${nodes.map((n, i) => `<button class="trace-node ${n.source === "Unknown" || n.title === "Not established" ? "unknown" : ""}" data-action="${n.action}" title="${e(n.title)}"><span class="trace-label"><b>${n.icon}</b>${i + 1}. ${n.label}</span><strong>${e(n.title)}</strong><small>${e(n.source)}</small><span class="trace-arrow" aria-hidden="true">→</span></button>`).join("")}</div></figure>`;
+  return `<figure class="trace-figure"><figcaption>Evidence trail <span>${snapshot.source === "demo" ? "Example relationships" : "What connects this change"}</span></figcaption><div class="trace-grid">${nodes.map((n, i) => `<button class="trace-node ${n.source === "Unknown" || n.title === "Not established" || n.title === "Not verified" ? "unknown" : ""}" data-action="${n.action}" title="${e(n.title)}"><span class="trace-label"><b>${n.icon}</b>${i + 1}. ${n.label}</span><strong>${e(n.title)}</strong><small>${e(n.source)}</small><span class="trace-arrow" aria-hidden="true">→</span></button>`).join("")}</div></figure>`;
 }
 export function layoutGraph(nodes, edges, compact) {
   const levels = new Map(nodes.map((n) => [n, 0]));

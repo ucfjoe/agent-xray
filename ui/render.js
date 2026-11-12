@@ -1,3 +1,4 @@
+import { projectCheck, checksForHunk } from "../core/verification.js";
 import { impactFigure, traceFigure, layoutGraph } from "./figures.js";
 import { projectReview, newestFirst } from "../core/model.js";
 import { escape as e, renderDiff } from "./diff.js";
@@ -150,9 +151,7 @@ function detail(snapshot, h, state, p) {
   if (!h)
     return `<section class="inspector">${empty("Choose a change", "Select a story step, file, map node or timeline event to inspect its code and evidence.")}</section>`;
   const relationships = snapshot.relationships.filter((r) => r.hunkId === h.id);
-  const checks = newestFirst(snapshot.checks, snapshot.events).filter(
-    (c) => c.hunkIds?.includes(h.id) || c.eventId === h.eventId,
-  );
+  const checks = checksForHunk(snapshot, h);
   const action = snapshot.events.find((ev) => ev.id === h.eventId);
   const index = p.hunks.findIndex((x) => x.id === h.id);
   return `<section class="inspector" aria-label="Change inspector"><div class="inspector-title"><button class="back-button" data-action="back" aria-label="Back to changes">←</button><span class="file-icon">⌘</span><div class="file-label"><h2>${e(basename(h.path))}</h2><small title="${e(h.path)}">${e(dir(h.path) || "Repository root")}</small></div>${delta(h)}</div>${traceFigure(snapshot, h)}<div class="diff-toolbar"><span>${h.rangeKind === "excerpt" ? "Recorded excerpt · offsets unavailable" : `Lines ${h.newStart ?? 1}–${(h.newStart ?? 1) + Math.max(0, h.lines.filter((l) => /^[ +]/.test(l)).length - 1)}`}</span><div class="segmented"><button data-layout="unified" aria-pressed="${state.layout === "unified"}">Unified</button><button data-layout="split" aria-pressed="${state.layout === "split"}">Split</button></div></div><div class="code-scroll" tabindex="0" aria-label="Code diff">${renderDiff(h, state.layout, state.selectedLine)}</div><div class="hunk-controls"><span>Change ${index + 1} of ${p.hunks.length}</span><button data-action="previous" aria-label="Previous change" ${index <= 0 ? "disabled" : ""}>↑</button><button data-action="next" aria-label="Next change" ${index >= p.hunks.length - 1 ? "disabled" : ""}>↓</button><button data-action="copy">${h.rangeKind === "excerpt" ? "Copy excerpt" : "Copy patch"}</button></div><details class="context-card" open><summary><span>◈</span> Why this changed</summary>${
@@ -173,7 +172,7 @@ function detail(snapshot, h, state, p) {
     )
     .join(
       "",
-    )}</div>${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
+    )}</div>${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
 }
 export function render(
   snapshot,
@@ -231,9 +230,10 @@ export function render(
           snapshot.checks,
           snapshot.events,
         )
+          .map((c) => projectCheck(snapshot, c))
           .map(
             (c) =>
-              `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`,
+              `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`,
           )
           .join("")}</details>`
       : ""

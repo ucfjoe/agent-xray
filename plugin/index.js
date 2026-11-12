@@ -14,6 +14,7 @@ const assets = new Map(
     "examples.js",
     "style.css",
     "core/model.js",
+    "core/verification.js",
     "ui/state.js",
     "ui/render.js",
     "ui/diff.js",
