@@ -75,3 +75,27 @@ test("authorized saved history works after workspace removal without replay or i
     await rm(root, { recursive: true, force: true });
   }
 });
+
+import { enrichSaved } from "../plugin/checkpoints.js";
+test("file-only supplemental checkpoints remain browsable without rewriting history", async () => {
+  const old = normalizeSnapshot({
+    sessionId: "a",
+    snapshotId: "s",
+    checkpointSeqs: [3],
+  });
+  const supplemental = {
+    sessionId: "a",
+    seq: 3,
+    hunks: [],
+    files: [{ id: "image.png", path: "image.png", kind: "binary" }],
+    event: { id: "a:3", seq: 3, type: "checkpoint", hunkIds: [] },
+    relationships: [],
+    notices: [],
+  };
+  const result = await enrichSaved(old, {
+    getCheckpoint: async () => supplemental,
+  });
+  assert.equal(result.files.length, 1);
+  assert.equal(result.events.length, 1);
+  assert.equal(old.files.length, 0);
+});

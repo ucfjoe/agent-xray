@@ -24,23 +24,23 @@
 ### Task 1: Conservative evidence projection
 Files: core/verification.js (new), ui/render.js, ui/figures.js, plugin/dsh-adapter.js, plugin/index.js; test/verification.test.js.
 Interface: projectCheck(snapshot, check, hunk?) returns display status, testOutcome, toolOutcome, binding and association; checksForHunk(snapshot,hunk) returns consistently selected projected evidence.
-- [ ] Add failing tests for legacy/forged passing results, shared-event context and demo separation.
-- [ ] Implement projection; live results always testOutcome unknown, binding contextual or unlinked; new adapter records explicit review identity and unknown test metadata.
-- [ ] Use same helper in figures, inspector and command list; add browser-served asset.
-- [ ] Run unit tests, commit.
+- [x] Add failing tests for legacy/forged passing results, shared-event context and demo separation.
+- [x] Implement projection; live results always testOutcome unknown, binding contextual or unlinked; new adapter records explicit review identity and unknown test metadata.
+- [x] Use same helper in figures, inspector and command list; add browser-served asset.
+- [x] Run unit tests, commit.
 
 ### Task 2: Event-bounded checkpoint preservation
 Files: plugin/capture-queue.js (new), plugin/history-store.js, plugin/dsh-adapter.js, plugin/index.js; test/capture.test.js.
 Interfaces: createCaptureQueue({capture,onError,maxPending=32}) returns enqueue(sessionId,seq,type), dispose(), idle(); sequential global work bounds memory, preserves sequence per enqueue, suppresses duplicates. Capture uses readSessionReview throughSeq and abort signal. Store putCheckpoint(sessionId,seq,value)/getCheckpoint persist optional supplements separately; supplement includes only that checkpoint's exact hunks/files/event, not extra raw content.
-- [ ] Test rapid events with distinct ranges, bounded queue errors, disposal and write errors.
-- [ ] Replace collapsing debounce with bounded queue; retain event sequence and capture failures as bounded per-session notices.
-- [ ] Persist exact checkpoint supplements immutably; adapter uses saved checkpoint when host comparison expires. Keep old aggregates unchanged.
-- [ ] Test fresh store reload, cross-session isolation and unavailable comparisons; run suite, commit.
+- [x] Test rapid events with distinct ranges, bounded queue errors, disposal and write errors.
+- [x] Replace collapsing debounce with bounded queue; retain event sequence and capture failures as bounded per-session notices.
+- [x] Persist exact checkpoint supplements immutably; adapter uses saved checkpoint when host comparison expires. Keep old aggregates unchanged.
+- [x] Test fresh store reload, cross-session isolation and unavailable comparisons; run suite, commit.
 
 ### Task 3: Independent saved-history reads and integration
 Files: plugin/index.js, plugin/review-service.js (new); test/review-service.test.js; docs/acceptance-results.md.
 Interface: readReview({services,store,sessionId,snapshotId,scope}) validates host session identity; requested historical snapshots use only saved data and optional checkpoint supplements, no realpath/current workspace replay. Current and workspace routes preserve prior behavior.
-- [ ] Test saved reads after directory removal and denied/mismatched sessions; missing snapshot remains 404.
-- [ ] Implement read service and stable supplemental enrichment without rewriting saved aggregate.
+- [x] Test saved reads after directory removal and denied/mismatched sessions; missing snapshot remains 404.
+- [x] Implement read service and stable supplemental enrichment without rewriting saved aggregate.
 - [ ] Run unit, cloud browser, native host, package import and CI checks; capture contextual-evidence screenshot.
 - [ ] Independent expert reviews of evidence and history; fix material findings with regression tests. Open reviewable PR; no merge or installation.

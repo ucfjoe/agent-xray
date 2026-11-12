@@ -1,11 +1,16 @@
 // A bounded, read-only worker. Enqueue never waits for filesystem or host work.
-export function createCaptureQueue({ capture, onError, maxPending = 32 }) {
+export function createCaptureQueue({
+  capture,
+  onError,
+  maxPending = 32,
+  timeoutMs = 10000,
+}) {
   const pending = [],
     keys = new Set(),
     waiters = [];
-  const controller = new AbortController();
   let running = false,
-    disposed = false;
+    disposed = false,
+    active;
   const report = (job, error) => {
     try {
       onError?.(job.id, job.seq, error);
@@ -16,12 +21,28 @@ export function createCaptureQueue({ capture, onError, maxPending = 32 }) {
     running = true;
     while (!disposed && pending.length) {
       const job = pending.shift();
+      const controller = new AbortController();
+      active = controller;
+      let timer;
+      const cancelled = new Promise((_, reject) =>
+        controller.signal.addEventListener(
+          "abort",
+          () => reject(Error("Capture cancelled or timed out")),
+          { once: true },
+        ),
+      );
       try {
-        await capture(job.id, job.seq, job.type, controller.signal);
+        timer = setTimeout(() => controller.abort(), timeoutMs);
+        await Promise.race([
+          capture(job.id, job.seq, job.type, controller.signal),
+          cancelled,
+        ]);
       } catch (error) {
         if (!disposed) report(job, error);
       } finally {
+        clearTimeout(timer);
         keys.delete(job.key);
+        active = undefined;
       }
     }
     running = false;
@@ -49,7 +70,7 @@ export function createCaptureQueue({ capture, onError, maxPending = 32 }) {
     },
     dispose() {
       disposed = true;
-      controller.abort();
+      active?.abort();
       pending.length = 0;
       keys.clear();
     },

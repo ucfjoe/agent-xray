@@ -158,3 +158,137 @@ test("real capture preserves both rapid checkpoint sequences and exact ranges af
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("checkpoint capture has its own budget and retains binary-only files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-budget-"));
+  try {
+    const store = createHistoryStore(root);
+    const events = [1, 2, 3].map((seq) => ({
+      seq,
+      type: "workspace/changes",
+      data: { turn: seq },
+    }));
+    const services = {
+      sessionQuery: {
+        readSession: async () => ({ session: { id: "a", cwd: root }, events }),
+      },
+      workspaceChanges: {
+        summary: () => ({ total: 1, files: [{}] }),
+        diff: async (id, seq) =>
+          seq === 3
+            ? { path: "image.png", kind: "binary" }
+            : {
+                path: "a.js",
+                kind: "text",
+                hunks: Array.from({ length: seq === 1 ? 1000 : 1 }, (_, i) => ({
+                  oldStart: i + 1,
+                  newStart: i + 1,
+                  lines: ["+x"],
+                })),
+              },
+      },
+    };
+    await captureReview({
+      services,
+      store,
+      sessionId: "a",
+      seq: 2,
+      type: "workspace/changes",
+    });
+    assert.equal((await store.getCheckpoint("a", 2)).hunks.length, 1);
+    await captureReview({
+      services,
+      store,
+      sessionId: "a",
+      seq: 3,
+      type: "workspace/changes",
+    });
+    assert.deepEqual((await store.getCheckpoint("a", 3)).files, [
+      { id: "image.png", path: "image.png", kind: "binary" },
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("stalled host reads time out without blocking another session or publishing late data", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-timeout-"));
+  try {
+    const store = createHistoryStore(root);
+    let release;
+    const gate = new Promise((r) => (release = r));
+    const failures = [];
+    const services = {
+      sessionQuery: {
+        readSession: async (id) => {
+          if (id === "slow") await gate;
+          return {
+            session: { id, cwd: root },
+            events: [{ seq: 1, time: 1, type: "turn/end", data: {} }],
+          };
+        },
+      },
+    };
+    const q = createCaptureQueue({
+      timeoutMs: 20,
+      capture: (sessionId, seq, type, signal) =>
+        captureReview({ services, store, sessionId, seq, type, signal }),
+      onError: (id) => failures.push(id),
+    });
+    q.enqueue("slow", 1, "turn/end");
+    q.enqueue("fast", 1, "turn/end");
+    await q.idle();
+    assert.deepEqual(failures, ["slow"]);
+    assert.equal((await store.list("fast")).length, 1);
+    release();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal((await store.list("slow")).length, 0);
+    q.dispose();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+test("partial host comparisons are not published as immutable successes and oversized hunks are bounded", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-partial-"));
+  try {
+    const store = createHistoryStore(root);
+    const services = {
+      sessionQuery: {
+        readSession: async () => ({
+          session: { id: "a", cwd: root },
+          events: [{ seq: 1, type: "workspace/changes", data: { turn: 1 } }],
+        }),
+      },
+      workspaceChanges: {
+        summary: () => ({ total: 1, files: [{}] }),
+        diff: async () => undefined,
+      },
+    };
+    await assert.rejects(
+      () =>
+        captureReview({
+          services,
+          store,
+          sessionId: "a",
+          seq: 1,
+          type: "workspace/changes",
+        }),
+      /incomplete/,
+    );
+    assert.equal(await store.getCheckpoint("a", 1), undefined);
+    services.workspaceChanges.diff = async () => ({
+      path: "a.js",
+      kind: "text",
+      hunks: Array.from({ length: 1001 }, () => ({
+        oldStart: 1,
+        newStart: 1,
+        lines: ["+x"],
+      })),
+    });
+    const s = await readSessionReview(services, "a", { checkpointSeq: 1 });
+    assert.equal(s.hunks.length, 1000);
+    assert.equal(s.capture.complete, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -20,13 +20,14 @@ const clean = (s) =>
 export async function readSessionReview(
   services,
   sessionId,
-  { throughSeq = Infinity, signal } = {},
+  { throughSeq = Infinity, signal, checkpointSeq } = {},
 ) {
   if (!sessionId || !services.sessionQuery)
     throw Error(
       "Select a session with history support to inspect its changes.",
     );
   const log = await services.sessionQuery.readSession(sessionId);
+  if (signal?.aborted) throw Error("Request cancelled");
   if (log.session.id !== sessionId) throw Error("Session identity mismatch");
   const cwd = log.session.cwd;
   if (!cwd || !isAbsolute(cwd))
@@ -104,11 +105,14 @@ export async function readSessionReview(
     });
   }
   let previewBytes = 0;
+  let checkpointComplete = true;
   if (raw.length > 10000)
     model.notices.push(
       "Showing the latest 10,000 history events. Earlier activity is omitted from this preview.",
     );
-  for (const e of raw.slice(-10000)) {
+  for (const e of checkpointSeq === undefined
+    ? raw.slice(-10000)
+    : raw.filter((e) => e.seq === checkpointSeq)) {
     if (signal?.aborted) throw Error("Request cancelled");
     const d = e.data ?? {};
     if (e.type === "turn/start") {
@@ -301,8 +305,13 @@ export async function readSessionReview(
         hunkIds: [],
         objectiveId: objective?.id,
       };
+      if (summary.files.length > 100) {
+        checkpointComplete = false;
+        model.notices.push("Turn comparison file limit reached.");
+      }
       for (let i = 0; i < Math.min(summary.files.length, 100); i++) {
         if (model.hunks.length >= 1000 || previewBytes > 4000000) {
+          checkpointComplete = false;
           model.notices.push("Turn comparison preview limit reached.");
           break;
         }
@@ -312,7 +321,12 @@ export async function readSessionReview(
           i,
           signal ?? new AbortController().signal,
         );
-        if (!diff) continue;
+        if (signal?.aborted) throw Error("Request cancelled");
+        if (!diff) {
+          checkpointComplete = false;
+          model.notices.push("A host file comparison is unavailable.");
+          continue;
+        }
         const path = diff.path;
         if (isAbsolute(path) || path === ".." || path.startsWith("../"))
           continue;
@@ -320,10 +334,16 @@ export async function readSessionReview(
         if (diff.kind !== "text") continue;
         previewBytes += JSON.stringify(diff).length;
         if (previewBytes > 4000000) {
+          checkpointComplete = false;
           model.notices.push("Turn comparison preview limit reached.");
           break;
         }
         for (const [j, p] of diff.hunks.entries()) {
+          if (model.hunks.length >= 1000) {
+            checkpointComplete = false;
+            model.notices.push("Turn comparison hunk limit reached.");
+            break;
+          }
           const h = {
             id: id(e) + ":" + i + ":" + j,
             path,
@@ -347,6 +367,10 @@ export async function readSessionReview(
       );
     }
   }
+  model.capture = {
+    checkpointSeq: checkpointSeq ?? null,
+    complete: checkpointComplete,
+  };
   model.title = model.objectives.at(-1)?.title ?? "Session review";
   model.activity =
     raw.at(-1)?.type === "turn/end" ? "Idle" : "Observed history";
