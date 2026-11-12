@@ -1,47 +1,42 @@
-let changes = [
-  {
-    id: "sign", task: "Issue signed sessions", capability: "Account security", module: "Session service",
-    risk: "High", milestone: "Secure authentication", path: "src/auth/session.ts", oldLine: 12, newLine: 12,
-    story: "Sign session tokens with an expiry", action: "09:41 · Agent updated token issuance",
-    evidence: "Agent objective · Issue signed sessions to detect token tampering.",
-    verification: "Sample run · Session signing tests passed.",
-    lines: ["-  return encode({ subject });", "+  return signer.sign({ subject }, { expiresIn: '15m' });"],
-  },
-  {
-    id: "validate", task: "Protect authenticated routes", capability: "Account security", module: "HTTP middleware",
-    risk: "High", milestone: "Secure authentication", path: "src/auth/middleware.ts", oldLine: 18, newLine: 18,
-    story: "Verify signatures before accepting requests", action: "09:43 · Agent updated authentication middleware",
-    evidence: "User request · Secure authentication. Agent objective · Validate incoming sessions.",
-    verification: "Sample run · Middleware rejection test passed.",
-    lines: ["-  const session = decode(token);", "+  const session = verifier.verify(token);", "   return next(session);"],
-  },
-  {
-    id: "guard", task: "Protect authenticated routes", capability: "Request handling", module: "HTTP middleware",
-    risk: "Medium", milestone: "Secure authentication", path: "src/auth/middleware.ts", oldLine: 31, newLine: 31,
-    story: "Reject requests without a valid session", action: "09:44 · Agent added the route guard",
-    evidence: "Inferred from the guard condition · Requests without a session return HTTP 401.",
-    verification: "Sample status · End-to-end verification pending.",
-    lines: ["+  if (!session) return response.sendStatus(401);", "   return controller.handle(request);"],
-  },
-  {
-    id: "test", task: "Verify session handling", capability: "Account security", module: "Auth tests",
-    risk: "Low", milestone: "Regression coverage", path: "test/auth/middleware.test.ts", oldLine: 25, newLine: 25,
-    story: "Cover tampered tokens with a regression test", action: "09:46 · Agent added a rejection test",
-    evidence: "Agent objective · Exercise signature rejection in middleware.",
-    verification: "Sample run · Tampered-token regression passed.",
-    lines: ["+  const response = await requestWithToken(tamperedToken);", "+  expect(response.status).toBe(401);"],
-  },
-];
-
-const live = new URLSearchParams(location.search).has("live");
-if (live) changes = [];
+const params = new URLSearchParams(location.search);
+const live = params.has("live");
+const initialExample = exampleScenarios.find((scenario) => scenario.id === params.get("demo")) ?? exampleScenarios[0];
+let changes = [];
+let currentScenario;
+let pendingRequest;
 
 const fields = { task: "Implementation task", capability: "Business capability", module: "Architecture module", risk: "Review priority", milestone: "Conversation milestone" };
 const state = { task: "", view: "story", group: "task", selected: changes[0]?.id };
 const byId = (id) => document.getElementById(id);
 const tasks = byId("task");
-tasks.add(new Option("All objectives", ""));
-for (const task of new Set(changes.map((change) => change.task))) tasks.add(new Option(task, task));
+const source = byId("source");
+const scenarios = byId("scenario");
+const status = byId("source-status");
+const refresh = document.createElement("button");
+refresh.textContent = "Refresh Git changes";
+refresh.hidden = true;
+byId("panel").querySelector("header").append(refresh);
+for (const scenario of exampleScenarios) scenarios.add(new Option(scenario.title, scenario.id));
+scenarios.value = initialExample.id;
+source.value = live && !params.has("demo") ? "live" : "examples";
+if (!live) source.querySelector('[value="live"]').disabled = true;
+
+function visibleChanges() {
+  return changes.filter((change) => !state.task || change.task === state.task);
+}
+
+function replaceChanges(nextChanges) {
+  changes = nextChanges;
+  if (!changes.some((change) => change.task === state.task)) state.task = "";
+  const entries = visibleChanges();
+  if (!entries.some((change) => change.id === state.selected)) state.selected = entries[0]?.id;
+  tasks.replaceChildren(new Option("All objectives", ""));
+  for (const task of new Set(changes.map((change) => change.task))) tasks.add(new Option(task, task));
+  tasks.value = state.task;
+  tasks.disabled = !changes.length;
+  renderNavigation();
+  renderDetail();
+}
 
 function list(label, entries, title) {
   const section = document.createElement("section");
@@ -52,7 +47,16 @@ function list(label, entries, title) {
   for (const change of entries) {
     const item = document.createElement("li");
     const button = document.createElement("button");
-    button.textContent = title(change);
+    const text = document.createElement("span");
+    text.textContent = title(change);
+    button.append(text);
+    if (change.check) {
+      const check = document.createElement("small");
+      check.className = "check-state";
+      check.dataset.status = change.check.status.toLowerCase();
+      check.textContent = change.check.status;
+      button.append(check);
+    }
     button.dataset.hunk = change.id;
     button.setAttribute("aria-pressed", change.id === state.selected);
     item.append(button);
@@ -73,7 +77,12 @@ function grouped(entries, field, title) {
 }
 
 function renderNavigation() {
-  const entries = changes.filter((change) => !state.task || change.task === state.task);
+  const entries = visibleChanges();
+  byId("scope-summary").textContent = [
+    entries.length + " hunks",
+    new Set(entries.map((change) => change.path)).size + " files",
+    new Set(entries.map((change) => change.task)).size + " tasks",
+  ].join(" · ");
   const navigation = byId("navigation");
   navigation.replaceChildren();
   switch (state.view) {
@@ -92,14 +101,26 @@ function renderNavigation() {
       navigation.append(label, ...grouped(entries, state.group, (change) => `${change.path} · line ${change.newLine}`));
       break;
     }
-    case "map":
-      navigation.append(...grouped(entries, "module", (change) => change.story));
+    case "map": {
+      for (const moduleName of new Set(entries.map((change) => change.module))) {
+        const members = entries.filter((change) => change.module === moduleName);
+        const section = list(moduleName, members, (change) => change.story);
+        const module = currentScenario?.modules.find((entry) => entry.name === moduleName);
+        if (module) {
+          const connections = document.createElement("p");
+          connections.className = "module-connections";
+          connections.textContent = module.dependsOn.length ? "Depends on " + module.dependsOn.join(", ") : "No outgoing dependencies in this example";
+          section.querySelector("h2").after(connections);
+        }
+        navigation.append(section);
+      }
       break;
+    }
     case "journey":
       navigation.append(list("Agent actions", entries, (change) => change.action));
       break;
     default:
-      navigation.append(list("Changes in this session", entries, (change) => change.story));
+      navigation.append(...grouped(entries, "task", (change) => change.story));
   }
 }
 
@@ -124,6 +145,8 @@ function diffColumn(lines, oldStart, newStart, side) {
 
 function renderDetail() {
   const change = changes.find(({ id }) => id === state.selected);
+  byId("check-detail").hidden = !change?.check;
+  byId("change-context").textContent = "";
   if (!change) {
     byId("path").textContent = "No selected change";
     byId("evidence").textContent = "";
@@ -133,7 +156,15 @@ function renderDetail() {
   }
   byId("path").textContent = `${change.path} · line ${change.newLine}`;
   byId("evidence").textContent = change.evidence;
-  byId("verification").textContent = change.verification;
+  byId("change-context").textContent = change.task + " · " + change.capability + " · " + change.risk + " risk";
+  byId("verification").textContent = change.verification ?? "";
+  if (change.check) {
+    byId("check-summary").textContent = "Example verification · " + change.check.status;
+    byId("check-summary").dataset.status = change.check.status.toLowerCase();
+    byId("check-command").textContent = change.check.command;
+    byId("check-output").textContent = change.check.output;
+    byId("check-detail").open = change.check.status === "Failed";
+  }
   const columns = byId("layout").value === "split"
     ? [
         diffColumn(change.lines.filter((line) => line[0] !== "+"), change.oldLine, change.newLine, "before"),
@@ -169,43 +200,55 @@ tasks.addEventListener("change", () => {
   renderDetail();
 });
 byId("layout").addEventListener("change", renderDetail);
-renderNavigation();
-renderDetail();
 
 if (live) {
   byId("host").hidden = true;
   byId("workspace").dataset.mode = "max";
   byId("modes").hidden = true;
-  const status = document.createElement("p");
-  status.setAttribute("role", "status");
-  const refresh = document.createElement("button");
-  refresh.textContent = "Refresh Git changes";
-  status.className = "source-note";
-  byId("panel").querySelector("header").append(refresh);
-  byId("panel").append(status);
-  async function loadChanges() {
-    refresh.disabled = true;
-    status.textContent = "Reading test repository…";
-    try {
-      const response = await fetch("/agent-xray/changes");
-      if (!response.ok) throw new Error("Git changes unavailable (HTTP " + response.status + ")");
-      const result = await response.json();
-      changes = result.changes;
-      if (!changes.some((change) => change.id === state.selected)) state.selected = changes[0]?.id;
-      state.task = "";
-      tasks.replaceChildren(new Option("All objectives", ""));
-      for (const task of new Set(changes.map((change) => change.task))) tasks.add(new Option(task, task));
-      status.textContent = result.note;
-    } catch (error) {
-      changes = [];
-      state.selected = undefined;
-      status.textContent = error.message;
-    } finally {
-      refresh.disabled = false;
-      renderNavigation();
-      renderDetail();
-    }
-  }
-  refresh.addEventListener("click", loadChanges);
-  loadChanges();
 }
+
+async function selectSource() {
+  pendingRequest?.abort();
+  const showExamples = source.value === "examples";
+  refresh.hidden = showExamples;
+  byId("scenario-control").hidden = !showExamples;
+  byId("example-notice").hidden = !showExamples;
+  byId("scenario-goal").hidden = !showExamples;
+  currentScenario = showExamples ? exampleScenarios.find((scenario) => scenario.id === scenarios.value) : undefined;
+  if (showExamples) {
+    refresh.disabled = false;
+    byId("scenario-goal").textContent = currentScenario.goal;
+    status.textContent = live
+      ? "Example data · Select a task or hunk to explore its context. Switch to Live Git changes for the configured repository."
+      : "Example data · Open the DSH sidebar to inspect live changes.";
+    replaceChanges(currentScenario.changes);
+    return;
+  }
+  const request = new AbortController();
+  pendingRequest = request;
+  refresh.disabled = true;
+  status.textContent = "Reading test repository…";
+  const previousSelection = { task: state.task, selected: state.selected };
+  replaceChanges([]);
+  try {
+    const response = await fetch("/agent-xray/changes", { signal: request.signal });
+    if (!response.ok) throw new Error("Git changes unavailable (HTTP " + response.status + ")");
+    const result = await response.json();
+    if (request.signal.aborted) return;
+    state.task = previousSelection.task;
+    state.selected = previousSelection.selected;
+    replaceChanges(result.changes);
+    status.textContent = result.note;
+  } catch (error) {
+    if (request.signal.aborted) return;
+    replaceChanges([]);
+    status.textContent = error.message;
+  } finally {
+    if (!request.signal.aborted) refresh.disabled = false;
+  }
+}
+
+source.addEventListener("change", selectSource);
+scenarios.addEventListener("change", selectSource);
+refresh.addEventListener("click", selectSource);
+selectSource();
