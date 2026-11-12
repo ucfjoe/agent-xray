@@ -25,6 +25,11 @@ function save() {
 function draw() {
   const focus = document.activeElement;
   const focusId = focus?.id;
+  const focusKind = focus?.classList.contains("file-row")
+    ? ".file-row"
+    : focus?.classList.contains("impact-row")
+      ? ".impact-row"
+      : "";
   const focusAttr = [
     "data-select",
     "data-view",
@@ -61,7 +66,7 @@ function draw() {
   }
   if (!focusId && focusAttr) {
     const target = root.querySelector(
-      `[${focusAttr}="${CSS.escape(focusValue)}"]`,
+      `${focusKind}[${focusAttr}="${CSS.escape(focusValue)}"]`,
     );
     if (target?.getClientRects().length) target.focus({ preventScroll: true });
     else {
@@ -69,7 +74,9 @@ function draw() {
       if (back?.getClientRects().length) back.focus({ preventScroll: true });
       else if (state.selected)
         root
-          .querySelector(`[data-select="${CSS.escape(state.selected)}"]`)
+          .querySelector(
+            `.file-row[data-select="${CSS.escape(state.selected)}"]`,
+          )
           ?.focus({ preventScroll: true });
     }
   }

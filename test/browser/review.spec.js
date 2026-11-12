@@ -108,14 +108,14 @@ test("live refresh preserves inspected snapshot until explicit catch up", async 
   await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto("/?live=1&session=s");
   await page.locator(".file-row").first().click();
-  await expect(page.locator('[data-select="h1"]')).toBeVisible();
+  await expect(page.locator('.file-row[data-select="h1"]')).toBeVisible();
   version = 2;
   await expect(page.getByText("New activity available")).toBeVisible({
     timeout: 10000,
   });
-  await expect(page.locator('[data-select="h1"]')).toBeVisible();
+  await expect(page.locator('.file-row[data-select="h1"]')).toBeVisible();
   await page.getByText("New activity available").click();
-  await expect(page.locator('[data-select="h2"]')).toBeVisible();
+  await expect(page.locator('.file-row[data-select="h2"]')).toBeVisible();
   await page.getByRole("button", { name: "Follow agent" }).click();
   version = 3;
   await expect(page.locator(".file-row.selected")).toHaveAttribute(
