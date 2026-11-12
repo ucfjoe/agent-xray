@@ -43,3 +43,14 @@ The live panel displays tracked text hunks against HEAD, including staged and un
 The architecture map currently groups by top-level directory. The standalone sample retains fictional task relationships. Live mode displays unavailable attribution and verification explicitly.
 
 The plugin requires DSH's Connection authentication service. Git paths come from the configured lab environment, and HTTP callers cannot select arbitrary directories.
+
+## Example sessions
+
+The sidebar opens with a clearly labeled fictional session. The Data source menu switches between Example scenarios and Live Git changes. Example actions and verification output are illustrative.
+
+Three scenarios contain six hunks each.
+- Secure authentication includes cookie protection, signature checks, and a failing refresh-token concurrency test.
+- Reliable checkout includes idempotency, retries, a failing timeout check, and a pending database migration.
+- Faster product catalog includes batched reads, cache keys, incomplete invalidation, and a sample latency benchmark.
+
+Every scenario supports task filtering, all five grouping perspectives, module relationships, the agent journey, and both diff layouts. Selecting a failed check exposes its sample command and output. The live data path continues to show observed Git changes with unavailable attribution and verification.
