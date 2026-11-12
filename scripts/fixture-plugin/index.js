@@ -58,6 +58,16 @@ export function apply(ctx) {
               oldText: "return name;\n",
               newText: "return name.trim();\n",
             },
+            {
+              path: join(cwd, "..", "other-repo-" + suffix, "greet.js"),
+              oldText: "old\n",
+              newText: "external\n",
+            },
+            {
+              path: "../worktree-" + suffix + "/greet.js",
+              oldText: "old\n",
+              newText: "worktree\n",
+            },
           ],
         },
       },

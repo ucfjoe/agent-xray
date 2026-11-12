@@ -13,7 +13,7 @@ function fileRow(h, state, narrative = false) {
   return button(
     h.id,
     h.path,
-    `<span class="file-icon">${/test|spec/.test(h.path) ? "✓" : "⌘"}</span><span class="file-label"><strong>${e(narrative ? (h.title ?? basename(h.path)) : basename(h.path))}</strong><small>${e(narrative ? basename(h.path) : (h.symbol ?? dir(h.path)))}</small></span>${delta(h)}`,
+    `<span class="file-icon">${/test|spec/.test(h.path) ? "✓" : "⌘"}</span><span class="file-label"><strong>${e(narrative ? (h.title ?? basename(h.path)) : basename(h.path))}</strong><small>${e(narrative ? h.path : [h.symbol, dir(h.path)].filter(Boolean).join(" · "))}</small></span>${delta(h)}`,
     `file-row ${narrative ? "narrative" : ""} ${state.selected === h.id ? "selected" : ""}`,
   );
 }
@@ -79,7 +79,7 @@ function journey(snapshot, p, state) {
           return button(
             id,
             h.path,
-            e(basename(h.path)),
+            e(h.path),
             "event-link " + (state.selected === id ? "selected" : ""),
           );
         })
@@ -237,5 +237,5 @@ export function render(
           )
           .join("")}</details>`
       : ""
-  }<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Recorded session evidence"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p>${(snapshot.diagnostics ?? []).map((d) => `<p>${e(d.path)}: ${e(d.reason)}</p>`).join("")}</details></footer>`;
+  }<footer><span>${source === "demo" ? "Illustrative examples" : snapshot.scope === "workspace" ? "Workspace scope · authorship unknown" : "Session edits across folders"}</span><details><summary>Scope & limitations</summary>${snapshot.notices.map((n) => `<p>${e(n)}</p>`).join("")}<p>${snapshot.files.filter((f) => ["binary", "oversized", "unavailable"].includes(f.kind)).length} files without text preview.</p>${(snapshot.diagnostics ?? []).map((d) => `<p>${e(d.path)}: ${e(d.reason)}</p>`).join("")}</details></footer>`;
 }

@@ -1,7 +1,8 @@
+import { sessionPath } from "./session-path.js";
 import { classifyPaths } from "../core/evidence.js";
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, normalize } from "node:path";
 import { structuredPatch } from "diff";
 import { normalizeSnapshot } from "../core/model.js";
 const digest = (x) =>
@@ -32,7 +33,13 @@ export async function readSessionReview(
   const cwd = log.session.cwd;
   if (!cwd || !isAbsolute(cwd))
     throw Error("This session has no workspace directory.");
-  const root = await realpath(cwd);
+  let root;
+  try {
+    root = await realpath(cwd);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    root = normalize(cwd); // Recorded evidence remains readable after workspace removal.
+  }
   const raw = [
     ...new Map(
       log.events
@@ -48,6 +55,7 @@ export async function readSessionReview(
     workspaceId: digest(root),
     root,
     snapshotId,
+    pathScopeVersion: 2,
     identity: {
       kind: "review-history",
       throughSeq: raw.at(-1)?.seq ?? -1,
@@ -181,7 +189,25 @@ export async function readSessionReview(
       if (!call) continue;
       const action = model.events.find((x) => x.id === call.eventId);
       action.status = d.message?.isError ? "failed" : "completed";
-      const diffs = Array.isArray(d.meta?.diffs) ? d.meta.diffs : [];
+      let diffs = Array.isArray(d.meta?.diffs) ? d.meta.diffs : [];
+      // DSH's write/create presentation intentionally omits diffs and uses call content.
+      if (
+        call.name === "write" &&
+        !d.message?.isError &&
+        d.meta?.operation === "create" &&
+        Array.isArray(d.meta.diffs) &&
+        !d.meta.diffs.length &&
+        typeof call.args.file_path === "string" &&
+        typeof call.args.content === "string"
+      ) {
+        diffs = [
+          {
+            path: call.args.file_path,
+            oldText: null,
+            newText: call.args.content,
+          },
+        ];
+      }
       for (const [i, diff] of diffs.entries()) {
         if (
           !diff ||
@@ -203,13 +229,14 @@ export async function readSessionReview(
           );
           continue;
         }
-        const path = isAbsolute(diff.path)
-          ? relative(root, diff.path)
-          : diff.path;
-        if (path === ".." || path.startsWith("../")) {
-          model.notices.push("An edit outside this workspace was omitted.");
+        const location = sessionPath(diff.path, cwd, root);
+        if (!location) {
+          model.notices.push(
+            "An edit with an invalid recorded path was omitted.",
+          );
           continue;
         }
+        const { path } = location;
         const patch = structuredPatch(
           path,
           path,
@@ -226,7 +253,7 @@ export async function readSessionReview(
         for (const [j, p] of patch.hunks.entries()) {
           const h = {
             id: id(e) + ":" + i + ":" + j,
-            path,
+            ...location,
             title: call.name + " " + path.split("/").at(-1),
             lines: p.lines.filter(
               (l) => /^[ +\-]/.test(l) || l.startsWith("\\ No newline"),
@@ -273,7 +300,17 @@ export async function readSessionReview(
           "A saved turn comparison could not be read; trying the host comparison.",
         );
       }
-      if (saved) {
+      const summary =
+        saved?.pathScopeVersion === 2
+          ? undefined
+          : services.workspaceChanges?.summary(sessionId, e.seq);
+      if (saved && (saved.pathScopeVersion === 2 || !summary)) {
+        if (saved.pathScopeVersion !== 2) {
+          checkpointComplete = false;
+          model.notices.push(
+            "This older saved checkpoint may omit outside-folder changes; the host comparison has expired. Recorded tool edits are still shown.",
+          );
+        }
         const bytes = JSON.stringify(saved).length;
         if (
           previewBytes + bytes > 4000000 ||
@@ -289,7 +326,6 @@ export async function readSessionReview(
         model.notices.push(...saved.notices);
         continue;
       }
-      const summary = services.workspaceChanges?.summary(sessionId, e.seq);
       if (!summary) {
         model.notices.push(
           "A turn comparison is no longer available from DSH. Recorded file edits remain available.",
@@ -327,10 +363,16 @@ export async function readSessionReview(
           model.notices.push("A host file comparison is unavailable.");
           continue;
         }
-        const path = diff.path;
-        if (isAbsolute(path) || path === ".." || path.startsWith("../"))
+        const location = sessionPath(diff.path, cwd, root);
+        if (!location) {
+          checkpointComplete = false;
+          model.notices.push(
+            "A checkpoint with an invalid recorded path was omitted.",
+          );
           continue;
-        model.files.push({ id: path, path, kind: diff.kind });
+        }
+        const { path } = location;
+        model.files.push({ id: path, ...location, kind: diff.kind });
         if (diff.kind !== "text") continue;
         previewBytes += JSON.stringify(diff).length;
         if (previewBytes > 4000000) {
@@ -346,7 +388,7 @@ export async function readSessionReview(
           }
           const h = {
             id: id(e) + ":" + i + ":" + j,
-            path,
+            ...location,
             title: path.split("/").at(-1),
             oldStart: p.oldStart,
             newStart: p.newStart,
@@ -375,6 +417,9 @@ export async function readSessionReview(
   model.title = model.objectives.at(-1)?.title ?? "Session review";
   model.activity =
     raw.at(-1)?.type === "turn/end" ? "Idle" : "Observed history";
+  model.notices.push(
+    "Session evidence includes recorded edits across folders and worktrees. Shell edits without host diff evidence may be unavailable.",
+  );
   model.notices = [...new Set(model.notices)];
   if (!model.hunks.length)
     model.notices.push(

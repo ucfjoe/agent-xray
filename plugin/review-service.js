@@ -1,3 +1,4 @@
+import { recoverSession } from "./recover-session.js";
 import { readSessionReview } from "./dsh-adapter.js";
 import { readWorkspaceReview } from "./workspace.js";
 import { enrichSaved } from "./checkpoints.js";
@@ -20,6 +21,25 @@ export async function readReview({
       throw Object.assign(Error("This historical snapshot is unavailable."), {
         statusCode: 404,
       });
+    if (
+      snapshot.pathScopeVersion !== 2 &&
+      Number.isSafeInteger(snapshot.identity?.throughSeq)
+    ) {
+      try {
+        const replay = await readSessionReview(services, sessionId, {
+          throughSeq: snapshot.identity.throughSeq,
+        });
+        snapshot = recoverSession(snapshot, replay);
+      } catch {
+        snapshot = {
+          ...snapshot,
+          notices: [
+            ...(snapshot.notices ?? []),
+            "Some previously omitted session edits could not be recovered from host history.",
+          ],
+        };
+      }
+    }
   } else {
     const current = await readSessionReview(services, sessionId);
     if (scope === "workspace")
@@ -28,7 +48,8 @@ export async function readReview({
         workspaceId: current.workspaceId,
         root: current.root,
       });
-    snapshot = (await store.get(sessionId, current.snapshotId)) ?? current;
+    const retained = await store.get(sessionId, current.snapshotId);
+    snapshot = retained ? recoverSession(retained, current) : current;
     await store.put(current);
     latestSnapshotId = current.snapshotId;
   }

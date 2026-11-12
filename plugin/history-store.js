@@ -43,26 +43,35 @@ export function createHistoryStore(root) {
         throw Error("Checkpoint identity mismatch");
       const dir = join(root, key(sessionId), "checkpoints");
       await mkdir(dir, { recursive: true, mode: 0o700 });
-      return publish(join(dir, key(String(seq)) + ".json"), checkpoint);
+      return publish(
+        join(
+          dir,
+          key(String(seq)) +
+            (checkpoint.pathScopeVersion === 2 ? ".scope-v2.json" : ".json"),
+        ),
+        checkpoint,
+      );
     },
     async getCheckpoint(sessionId, seq) {
-      try {
-        const s = JSON.parse(
-          await readFile(
-            join(
-              root,
-              key(sessionId),
-              "checkpoints",
-              key(String(seq)) + ".json",
+      for (const suffix of [".scope-v2.json", ".json"]) {
+        try {
+          const s = JSON.parse(
+            await readFile(
+              join(
+                root,
+                key(sessionId),
+                "checkpoints",
+                key(String(seq)) + suffix,
+              ),
+              "utf8",
             ),
-            "utf8",
-          ),
-        );
-        return s.sessionId === sessionId && s.seq === seq ? s : undefined;
-      } catch (e) {
-        if (e.code === "ENOENT") return undefined;
-        throw e;
+          );
+          if (s.sessionId === sessionId && s.seq === seq) return s;
+        } catch (e) {
+          if (e.code !== "ENOENT") throw e;
+        }
       }
+      return undefined;
     },
     async put(snapshot) {
       const dir = join(root, key(snapshot.sessionId));

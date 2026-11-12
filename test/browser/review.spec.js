@@ -322,3 +322,68 @@ test("live command context stays unverified in both diagram and inspector", asyn
     fullPage: true,
   });
 });
+
+test("cross-folder session edits stay distinguishable in narrow and expanded views", async ({
+  page,
+}) => {
+  const paths = [
+    "src/shared.ts",
+    "/repos/another-app/src/shared.ts",
+    "/worktrees/fix/src/shared.ts",
+  ];
+  await page.route("**/agent-xray/review?**", (route) =>
+    route.fulfill({
+      json: {
+        source: "live",
+        scope: "session",
+        sessionId: "cross",
+        snapshotId: "cross-1",
+        title: "Review changes across repositories",
+        hunks: paths.map((path, i) => ({
+          id: "h" + i,
+          path,
+          eventId: "e" + i,
+          lines: ["-old", "+new"],
+          rangeKind: "excerpt",
+        })),
+        events: paths.map((path, i) => ({
+          id: "e" + i,
+          seq: i,
+          type: "action",
+          title: "Edit " + path,
+          hunkIds: ["h" + i],
+        })),
+        files: [],
+        checks: [],
+        objectives: [],
+        relationships: [],
+        notices: [],
+      },
+    }),
+  );
+  for (const width of [380, 1200]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/?live=1&session=cross");
+    await expect(page.locator(".file-row")).toHaveCount(3);
+    await expect(page.locator(".file-row").first()).toContainText(
+      "/worktrees/fix/src/shared.ts",
+    );
+    await page.getByRole("tab", { name: "Journey", exact: true }).click();
+    await expect(page.locator(".event-link").first()).toHaveText(
+      "/worktrees/fix/src/shared.ts",
+    );
+    await page.locator(".event-link").first().click();
+    await expect(page.locator(".inspector-title")).toContainText(
+      "/worktrees/fix/src",
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+  await page.screenshot({
+    path: "test-results/cross-folder-session.png",
+    fullPage: true,
+  });
+});
