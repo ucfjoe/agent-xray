@@ -10,6 +10,10 @@ export async function readReview({
   snapshotId,
   scope,
 }) {
+  services = {
+    ...services,
+    writeCheckpoint: (id, seq, value) => store.putCheckpoint(id, seq, value),
+  };
   let snapshot, latestSnapshotId;
   if (snapshotId && scope !== "workspace") {
     if (!sessionId || !services.sessionQuery)

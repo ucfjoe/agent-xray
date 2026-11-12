@@ -67,10 +67,15 @@ for (const scheme of ["light", "dark"])
         path: `test-results/preview-${scheme}-${width}.png`,
         fullPage: true,
       });
-      if (width === 1440) {
-        await page.getByRole("tab", { name: "Map", exact: true }).click();
+      for (const view of ["Story", "Changes", "Map", "Journey"]) {
+        await page.getByRole("tab", { name: view, exact: true }).click();
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
         await page.screenshot({
-          path: `test-results/map-${scheme}.png`,
+          path: `test-results/audit-${scheme}-${width}-${view.toLowerCase()}.png`,
           fullPage: true,
         });
       }
@@ -361,16 +366,16 @@ test("cross-folder session edits stay distinguishable in narrow and expanded vie
       },
     }),
   );
-  for (const width of [380, 1200]) {
+  for (const width of [380, 900, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/?live=1&session=cross");
     await expect(page.locator(".file-row")).toHaveCount(3);
     await expect(page.locator(".file-row").first()).toContainText(
-      "/worktrees/fix/src/shared.ts",
+      "…/fix/src/shared.ts",
     );
     await page.getByRole("tab", { name: "Journey", exact: true }).click();
     await expect(page.locator(".event-link").first()).toHaveText(
-      "/worktrees/fix/src/shared.ts",
+      "…/fix/src/shared.ts",
     );
     await page.locator(".event-link").first().click();
     await expect(page.locator(".inspector-title")).toContainText(
@@ -381,6 +386,11 @@ test("cross-folder session edits stay distinguishable in narrow and expanded vie
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    await page.getByRole("tab", { name: "Story", exact: true }).click();
+    await page.screenshot({
+      path: `test-results/cross-folder-${width}.png`,
+      fullPage: true,
+    });
   }
   await page.screenshot({
     path: "test-results/cross-folder-session.png",

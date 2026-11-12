@@ -20,6 +20,7 @@ const assets = new Map(
     "ui/render.js",
     "ui/diff.js",
     "ui/figures.js",
+    "ui/paths.js",
   ].map((path) => [
     "/agent-xray/" + path,
     [

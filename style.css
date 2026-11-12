@@ -1084,3 +1084,22 @@ figure {
   height: 9px;
   left: -5px;
 }
+
+/* Keep repository context readable instead of clipping long shared path prefixes. */
+.file-row .file-label small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.event-link {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.scope-summary {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}

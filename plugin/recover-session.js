@@ -37,11 +37,13 @@ export function recoverSession(saved, replayed) {
   result.events ??= [];
   for (const event of replayed.events ?? []) {
     const existing = result.events.find((e) => e.id === event.id);
-    if (existing)
-      existing.hunkIds = [
-        ...new Set([...(existing.hunkIds ?? []), ...(event.hunkIds ?? [])]),
-      ];
-    else if (result.events.length < 10000 && admit(event))
+    if (existing) {
+      const additions = (event.hunkIds ?? []).filter(
+        (id) => hunkIds.has(id) && !(existing.hunkIds ?? []).includes(id),
+      );
+      if (additions.length && admit(additions))
+        existing.hunkIds = [...(existing.hunkIds ?? []), ...additions];
+    } else if (result.events.length < 10000 && admit(event))
       result.events.push({
         ...structuredClone(event),
         hunkIds: (event.hunkIds ?? []).filter((id) => hunkIds.has(id)),
@@ -60,7 +62,11 @@ export function recoverSession(saved, replayed) {
   result.notices = [
     ...new Set([
       ...(result.notices ?? []).filter(
-        (n) => n !== "An edit outside this workspace was omitted.",
+        (n) =>
+          n !== "An edit outside this workspace was omitted." &&
+          !(
+            result.files.length && n.startsWith("No recorded file edits found.")
+          ),
       ),
       ...(replayed.notices ?? []),
       ...(limited ? ["Recovered session evidence preview limit reached."] : []),

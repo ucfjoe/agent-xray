@@ -125,13 +125,7 @@ test("same-ID caches recover outside edits and old empty checkpoints without rew
       JSON.parse(JSON.stringify(old)),
     );
     assert.ok(result.events.some((e) => e.hunkIds.includes(fresh.hunks[0].id)));
-    await captureReview({
-      services,
-      store,
-      sessionId: "s",
-      seq: 3,
-      type: "workspace/changes",
-    });
+
     services.workspaceChanges.summary = () => undefined;
     assert.equal(
       (await readSessionReview(services, "s")).hunks.find(
@@ -246,6 +240,7 @@ test("additive cache recovery keeps preview bounds and does not link omitted hun
   const old = normalizeSnapshot({
     sessionId: "s",
     snapshotId: "same",
+    events: [{ id: "event", hunkIds: [] }],
     hunks: Array.from({ length: 1000 }, (_, i) => ({
       id: "old" + i,
       path: "old.ts",
@@ -264,4 +259,102 @@ test("additive cache recovery keeps preview bounds and does not link omitted hun
   assert.ok(!merged.relationships.some((r) => r.hunkId === "new"));
   assert.ok(merged.events.every((e) => !e.hunkIds?.includes("new")));
   assert.ok(merged.notices.some((n) => /limit/i.test(n)));
+});
+
+test("empty created files remain visible without hunks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-empty-"));
+  try {
+    const log = {
+      session: { id: "s", cwd: root },
+      events: [
+        {
+          seq: 1,
+          type: "tool/call",
+          data: {
+            name: "write",
+            callId: "c",
+            arguments: JSON.stringify({
+              file_path: "/other/empty.txt",
+              content: "",
+            }),
+          },
+        },
+        {
+          seq: 2,
+          type: "tool/result",
+          data: {
+            message: { toolCallId: "c", isError: false },
+            meta: { operation: "create", diffs: [] },
+          },
+        },
+      ],
+    };
+    const result = await readSessionReview(
+      { sessionQuery: { readSession: async () => log } },
+      "s",
+    );
+    assert.equal(result.files[0].path, "/other/empty.txt");
+    assert.equal(result.hunks.length, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+test("host recovery failure falls back to readable legacy checkpoint", async () => {
+  const root = await mkdtemp(join(tmpdir(), "xray-fallback-"));
+  try {
+    const saved = {
+      sessionId: "s",
+      seq: 1,
+      hunks: [
+        {
+          id: "s:1:0:0",
+          sourceId: "s:1",
+          eventId: "s:1",
+          path: "old.ts",
+          lines: ["+x"],
+          rangeKind: "file",
+        },
+      ],
+      files: [{ id: "old.ts", path: "old.ts" }],
+      event: { id: "s:1", seq: 1, type: "checkpoint", hunkIds: ["s:1:0:0"] },
+      notices: [],
+    };
+    const result = await readSessionReview(
+      {
+        sessionQuery: {
+          readSession: async () => ({
+            session: { id: "s", cwd: root },
+            events: [{ seq: 1, type: "workspace/changes", data: { turn: 1 } }],
+          }),
+        },
+        readCheckpoint: async () => saved,
+        workspaceChanges: {
+          summary: () => ({ files: [{}], total: 1 }),
+          diff: async () => {
+            throw Error("expired");
+          },
+        },
+      },
+      "s",
+    );
+    assert.equal(result.hunks[0].path, "old.ts");
+    assert.ok(
+      result.notices.some((n) => /unavailable|expired|recover/i.test(n)),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+import { pathLabel } from "../ui/paths.js";
+test("compact paths keep repository identities distinct while omitting shared prefixes", () => {
+  const paths = [
+    "src/shared.ts",
+    "/Users/person/repos/another/src/shared.ts",
+    "/Users/person/worktrees/fix/src/shared.ts",
+  ];
+  assert.deepEqual(
+    paths.map((p) => pathLabel(p, paths)),
+    ["src/shared.ts", "…/another/src/shared.ts", "…/fix/src/shared.ts"],
+  );
 });
