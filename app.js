@@ -26,9 +26,11 @@ function draw() {
   const focus = document.activeElement;
   const focusId = focus?.id;
   const caret = focus?.selectionStart;
-  const positions = [
-    ...root.querySelectorAll(".navigator,.inspector,.code-scroll"),
-  ].map((n) => [n.className, n.scrollTop, n.scrollLeft]);
+  const positions =
+    state.scroll?.[state.view + ":" + (state.selected ?? "")] ??
+    [...root.querySelectorAll(".navigator,.inspector,.code-scroll")].map(
+      (n) => [n.className, n.scrollTop, n.scrollLeft],
+    );
   root.innerHTML = render(snapshot, state, {
     source,
     scenarios,
@@ -97,6 +99,7 @@ async function load({ background = false } = {}) {
       data.snapshotId !== snapshot.snapshotId &&
       !state.follow
     ) {
+      if (pending?.snapshotId === data.snapshotId) return;
       pending = data;
       history = data.history ?? history;
       draw();
@@ -212,3 +215,14 @@ load();
 setInterval(() => {
   if (source !== "demo" && !document.hidden) load({ background: true });
 }, 5000);
+
+root.addEventListener(
+  "scroll",
+  () => {
+    state.scroll[state.view + ":" + (state.selected ?? "")] = [
+      ...root.querySelectorAll(".navigator,.inspector,.code-scroll"),
+    ].map((n) => [n.className, n.scrollTop, n.scrollLeft]);
+    save();
+  },
+  true,
+);

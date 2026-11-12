@@ -107,11 +107,12 @@ export function apply(ctx) {
                 );
                 return;
               }
+              const retained = await store.get(sessionId, current.snapshotId);
               await store.put(current);
               const requested = url.searchParams.get("snapshot");
               const snapshot = requested
                 ? await store.get(sessionId, requested)
-                : current;
+                : (retained ?? current);
               if (!snapshot) {
                 json(404, {
                   error: "This historical snapshot is unavailable.",

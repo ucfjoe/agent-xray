@@ -49,3 +49,16 @@ test("demo provenance cannot enter a live snapshot", () =>
       }),
     /demo/,
   ));
+import { classifyPaths } from "../core/evidence.js";
+test("business and risk groupings explain their heuristic provenance", () => {
+  const s = classifyPaths(
+    normalizeSnapshot({ hunks: [{ id: "h", path: "src/auth.ts" }] }),
+  );
+  assert.equal(
+    projectReview(s, { groupBy: "capability" }).groups[0].name,
+    "Account security",
+  );
+  assert.equal(s.relationships[0].provenance, "inferred");
+  assert.match(s.relationships[0].rationale, /not a declared objective/);
+  assert.equal(s.objectives.length, 0);
+});

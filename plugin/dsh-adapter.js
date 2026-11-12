@@ -1,3 +1,4 @@
+import { classifyPaths } from "../core/evidence.js";
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
@@ -272,7 +273,7 @@ export async function readSessionReview(
       );
     }
   }
-  model.title = model.objectives[0]?.title ?? "Session review";
+  model.title = model.objectives.at(-1)?.title ?? "Session review";
   model.activity =
     raw.at(-1)?.type === "turn/end" ? "Idle" : "Observed history";
   model.notices = [...new Set(model.notices)];
@@ -280,5 +281,5 @@ export async function readSessionReview(
     model.notices.push(
       "No recorded file edits found. Switch to Workspace to inspect current Git changes without session attribution.",
     );
-  return normalizeSnapshot(model);
+  return classifyPaths(normalizeSnapshot(model));
 }

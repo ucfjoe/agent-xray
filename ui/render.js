@@ -7,12 +7,12 @@ const delta = (h) =>
   `<span class="delta"><span>+${h.added ?? 0}</span><span>−${h.deleted ?? 0}</span></span>`;
 const button = (id, title, body, cls = "") =>
   `<button class="${cls}" data-select="${e(id)}" title="${e(title)}">${body}</button>`;
-function fileRow(h, state) {
+function fileRow(h, state, narrative = false) {
   return button(
     h.id,
     h.path,
-    `<span class="file-icon">${/test|spec/.test(h.path) ? "✓" : "⌘"}</span><span class="file-label"><strong>${e(basename(h.path))}</strong><small>${e(h.symbol ?? dir(h.path))}</small></span>${delta(h)}`,
-    `file-row ${state.selected === h.id ? "selected" : ""}`,
+    `<span class="file-icon">${/test|spec/.test(h.path) ? "✓" : "⌘"}</span><span class="file-label"><strong>${e(narrative ? (h.title ?? basename(h.path)) : basename(h.path))}</strong><small>${e(narrative ? basename(h.path) : (h.symbol ?? dir(h.path)))}</small></span>${delta(h)}`,
+    `file-row ${narrative ? "narrative" : ""} ${state.selected === h.id ? "selected" : ""}`,
   );
 }
 function story(snapshot, p, state) {
@@ -28,7 +28,7 @@ function story(snapshot, p, state) {
     p.groups
       .map(
         (g, i) =>
-          `<section class="story-group"><div class="story-title"><span class="step-number">${String(i + 1).padStart(2, "0")}</span><div><h2>${e(g.name === "Not yet linked" ? "Changes awaiting context" : g.name)}</h2><p>${new Set(g.hunks.map((h) => h.path)).size} files · ${g.hunks.length} changes</p></div></div><div class="story-files">${g.hunks.map((h) => fileRow(h, state)).join("")}</div></section>`,
+          `<section class="story-group"><div class="story-title"><span class="step-number">${String(i + 1).padStart(2, "0")}</span><div><h2>${e(g.name === "Not yet linked" ? "Changes awaiting context" : g.name)}</h2><p>${new Set(g.hunks.map((h) => h.path)).size} files · ${g.hunks.length} changes</p></div></div><div class="story-files">${g.hunks.map((h) => fileRow(h, state, true)).join("")}</div></section>`,
       )
       .join("")
   );
@@ -148,7 +148,25 @@ function detail(snapshot, h, state, p) {
   );
   const action = snapshot.events.find((ev) => ev.id === h.eventId);
   const index = p.hunks.findIndex((x) => x.id === h.id);
-  return `<section class="inspector" aria-label="Change inspector"><div class="inspector-title"><button class="back-button" data-action="back" aria-label="Back to changes">←</button><span class="file-icon">⌘</span><div class="file-label"><h2>${e(basename(h.path))}</h2><small title="${e(h.path)}">${e(dir(h.path) || "Repository root")}</small></div>${delta(h)}</div><div class="diff-toolbar"><span>${h.rangeKind === "excerpt" ? "Recorded excerpt · offsets unavailable" : `Lines ${h.newStart ?? 1}–${(h.newStart ?? 1) + Math.max(0, h.lines.filter((l) => l[0] !== "-").length - 1)}`}</span><div class="segmented"><button data-layout="unified" aria-pressed="${state.layout === "unified"}">Unified</button><button data-layout="split" aria-pressed="${state.layout === "split"}">Split</button></div></div><div class="code-scroll" tabindex="0" aria-label="Code diff">${renderDiff(h, state.layout)}</div><div class="hunk-controls"><span>Change ${index + 1} of ${p.hunks.length}</span><button data-action="previous" aria-label="Previous change" ${index <= 0 ? "disabled" : ""}>↑</button><button data-action="next" aria-label="Next change" ${index >= p.hunks.length - 1 ? "disabled" : ""}>↓</button><button data-action="copy">${h.rangeKind === "excerpt" ? "Copy excerpt" : "Copy patch"}</button></div><details class="context-card" open><summary><span>◈</span> Why this changed</summary>${relationships.length ? relationships.map((r) => `<div class="evidence-row"><span class="badge">${e(r.provenance)}</span><div><strong>${e(r.kind === "task" ? (snapshot.objectives.find((o) => o.id === r.target)?.title ?? r.target) : r.target)}</strong><p>${e(r.rationale ?? `${r.kind} relationship from recorded context`)}</p><small>Source ${e(r.sourceId)}</small></div></div>`).join("") : "<p>No task or intent evidence is linked to this change. Repository differences alone do not establish why an agent changed it.</p>"}${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
+  return `<section class="inspector" aria-label="Change inspector"><div class="inspector-title"><button class="back-button" data-action="back" aria-label="Back to changes">←</button><span class="file-icon">⌘</span><div class="file-label"><h2>${e(basename(h.path))}</h2><small title="${e(h.path)}">${e(dir(h.path) || "Repository root")}</small></div>${delta(h)}</div><div class="diff-toolbar"><span>${h.rangeKind === "excerpt" ? "Recorded excerpt · offsets unavailable" : `Lines ${h.newStart ?? 1}–${(h.newStart ?? 1) + Math.max(0, h.lines.filter((l) => l[0] !== "-").length - 1)}`}</span><div class="segmented"><button data-layout="unified" aria-pressed="${state.layout === "unified"}">Unified</button><button data-layout="split" aria-pressed="${state.layout === "split"}">Split</button></div></div><div class="code-scroll" tabindex="0" aria-label="Code diff">${renderDiff(h, state.layout)}</div><div class="hunk-controls"><span>Change ${index + 1} of ${p.hunks.length}</span><button data-action="previous" aria-label="Previous change" ${index <= 0 ? "disabled" : ""}>↑</button><button data-action="next" aria-label="Next change" ${index >= p.hunks.length - 1 ? "disabled" : ""}>↓</button><button data-action="copy">${h.rangeKind === "excerpt" ? "Copy excerpt" : "Copy patch"}</button></div><details class="context-card" open><summary><span>◈</span> Why this changed</summary>${
+    relationships.length
+      ? relationships
+          .filter((r) => r.kind === "task")
+          .map(
+            (r) =>
+              `<div class="evidence-row"><span class="badge">${e(r.provenance)}</span><div><strong>${e(r.kind === "task" ? (snapshot.objectives.find((o) => o.id === r.target)?.title ?? r.target) : r.target)}</strong><p>${e(r.rationale ?? `${r.kind} relationship from recorded context`)}</p><small>Source ${e(r.sourceId)}</small></div></div>`,
+          )
+          .join("")
+      : "<p>No task or intent evidence is linked to this change. Repository differences alone do not establish why an agent changed it.</p>"
+  }<div class="relationship-tags">${relationships
+    .filter((r) => r.kind !== "task")
+    .map(
+      (r) =>
+        `<span class="badge" title="${e(r.provenance + ": " + (r.rationale ?? r.kind))}">${e(r.kind)} · ${e(r.target)}</span>`,
+    )
+    .join(
+      "",
+    )}</div>${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span><code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
 }
 export function render(
   snapshot,

@@ -1,3 +1,4 @@
+import { classifyPaths } from "../core/evidence.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile, realpath, lstat } from "node:fs/promises";
@@ -123,19 +124,21 @@ export async function readWorkspaceReview(context) {
     .update(JSON.stringify([context.sessionId, files, hunks]))
     .digest("hex")
     .slice(0, 24);
-  return normalizeSnapshot({
-    ...context,
-    source: "live",
-    snapshotId,
-    scope: "workspace",
-    title: "Workspace changes",
-    baseRevision: base,
-    hunks,
-    files,
-    ...analysis,
-    notices: [
-      "Current workspace changes, including edits outside this session. No agent attribution.",
-      ...notices,
-    ],
-  });
+  return classifyPaths(
+    normalizeSnapshot({
+      ...context,
+      source: "live",
+      snapshotId,
+      scope: "workspace",
+      title: "Workspace changes",
+      baseRevision: base,
+      hunks,
+      files,
+      ...analysis,
+      notices: [
+        "Current workspace changes, including edits outside this session. No agent attribution.",
+        ...notices,
+      ],
+    }),
+  );
 }

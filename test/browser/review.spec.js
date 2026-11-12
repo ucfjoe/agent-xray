@@ -75,3 +75,73 @@ for (const scheme of ["light", "dark"])
         });
       }
     });
+
+test("live refresh preserves inspected snapshot until explicit catch up", async ({
+  page,
+}) => {
+  let version = 1;
+  const fixture = () => ({
+    source: "live",
+    sessionId: "s",
+    workspaceId: "w",
+    snapshotId: "s" + version,
+    title: "Real fixture",
+    hunks: [
+      {
+        id: "h" + version,
+        path: "a.js",
+        title: "Edit a.js",
+        lines: ["-old", "+new"],
+        oldStart: 1,
+        newStart: 1,
+      },
+    ],
+    events: [],
+    relationships: [],
+    objectives: [],
+    checks: [],
+    notices: [],
+  });
+  await page.route("**/agent-xray/review?**", (route) =>
+    route.fulfill({ json: fixture() }),
+  );
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await page.goto("/?live=1&session=s");
+  await page.locator(".file-row").first().click();
+  await expect(page.locator('[data-select="h1"]')).toBeVisible();
+  version = 2;
+  await expect(page.getByText("New activity available")).toBeVisible({
+    timeout: 10000,
+  });
+  await expect(page.locator('[data-select="h1"]')).toBeVisible();
+  await page.getByText("New activity available").click();
+  await expect(page.locator('[data-select="h2"]')).toBeVisible();
+  await page.getByRole("button", { name: "Follow agent" }).click();
+  version = 3;
+  await expect(page.locator(".file-row.selected")).toHaveAttribute(
+    "data-select",
+    "h3",
+    { timeout: 10000 },
+  );
+});
+
+test("slow live response cannot overwrite an explicitly selected example", async ({
+  page,
+}) => {
+  let release;
+  let started;
+  const ready = new Promise((r) => (started = r));
+  await page.route("**/agent-xray/review?**", async (route) => {
+    started();
+    await new Promise((r) => (release = r));
+    await route
+      .fulfill({ json: { title: "Old live response", hunks: [] } })
+      .catch(() => {});
+  });
+  await page.goto("/?live=1&session=s");
+  await ready;
+  await page.locator("#source").selectOption("demo");
+  release();
+  await expect(page.locator("#source")).toHaveValue("demo");
+  await expect(page.locator(".story-group")).toHaveCount(3);
+});

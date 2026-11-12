@@ -874,3 +874,20 @@ footer p {
     scroll-behavior: auto !important;
   }
 }
+.narrative .file-label strong {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+}
+.narrative .file-label small {
+  margin-top: 4px;
+}
+.relationship-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
