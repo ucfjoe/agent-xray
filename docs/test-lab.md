@@ -22,7 +22,7 @@ To test actual agent editing, configure a model and create a DSH workspace point
 
 ## GitHub Codespaces
 
-The checked-in dev container installs the pinned DSH release and prepares the lab. Open this repository's Code menu, choose Codespaces, and create a Codespace. Attaching runs `npm run lab:start`; if a server is already running, reuse its terminal and URL.
+The checked-in dev container installs the pinned DSH release and prepares the lab. Open this repository's Code menu, choose Codespaces, and create a Codespace. Starting the Codespace launches DSH in the background. Read `.lab/server.log` for its authenticated startup URL.
 
 Keep port 3080 private. The startup script includes the exact Codespaces forwarded hostname in DSH's trusted hosts. Open the forwarded port and append the `?token=…` query from DSH's startup URL to authenticate. Stop the Codespace after use. Compute and storage count against the account's Codespaces quota and billing settings.
 
