@@ -35,7 +35,7 @@ window.__ModuleLoader__.load({
       return React.createElement("iframe", {
         ref: frame,
         title: "Agent X-Ray",
-        src: "/agent-xray/index.html?live=1&demo=authentication",
+        src: "/agent-xray/index.html?live=1",
         onLoad: syncTheme,
         style: { display: "block", width: "100%", height: "100%", minHeight: 0, border: 0 },
       });
