@@ -46,7 +46,7 @@ The plugin requires DSH's Connection authentication service. Git paths come from
 
 ## Example sessions
 
-The sidebar opens with a clearly labeled fictional session. The Data source menu switches between Example scenarios and Live Git changes. Example actions and verification output are illustrative.
+The sidebar opens with Live Git changes. Fictional scenarios are opt-in test fixtures: select Example scenarios in the Data source menu to explore them, then switch back to Live Git changes. They are never automatically loaded as session activity. Example actions and verification output are illustrative. The live source currently reads the configured lab repository; automatic session-to-workspace resolution remains future integration work.
 
 Three scenarios contain six hunks each.
 - Secure authentication includes cookie protection, signature checks, and a failing refresh-token concurrency test.

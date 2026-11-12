@@ -17,7 +17,7 @@ test("registers X-Ray as a retained native right-sidebar panel", async () => {
     effect: (callback) => callback(),
   };
   vm.runInNewContext(await readFile(new URL("../plugin/client.js", import.meta.url), "utf8"), {
-    window: { __ModuleLoader__: { load: ({ factory }) => { plugin = factory(() => ({})); } } },
+    window: { __ModuleLoader__: { load: ({ factory }) => { plugin = factory(() => ({ useRef: () => ({ current: null }), useCallback: (fn) => fn, useEffect: () => {}, createElement: (type, props) => ({ type, props }) })); } } },
   });
   plugin.apply(ctx);
   assert.equal(definitions.length, 1);
@@ -26,4 +26,6 @@ test("registers X-Ray as a retained native right-sidebar panel", async () => {
   assert.equal(definitions[0].guide[0].title(), "Agent X-Ray");
   assert.deepEqual(registrations.map(({ entry }) => entry.name), ["sidebar.right.pane.tab"]);
   assert.equal(registrations[0].entry.key, definitions[0].id);
+  const panel = registrations[0].component();
+  assert.equal(panel.props.src, "/agent-xray/index.html?live=1", "normal sessions must open live data, not fictional examples");
 });
