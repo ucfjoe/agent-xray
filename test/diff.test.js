@@ -1,3 +1,27 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {alignedRows,patchText,renderDiff} from '../ui/diff.js';
-test('split aligns replacements and preserves independent line numbers',()=>{const h={path:'a',oldStart:10,newStart:10,lines:[' context','-old','+new','+extra',' tail']};const r=alignedRows(h);assert.equal(r[1][0].old,11);assert.equal(r[1][1].next,11);assert.equal(r[2][0],undefined);assert.equal(r[3][0].old,12);assert.equal(r[3][1].next,13);assert.match(patchText(h),/@@ -10,3 \+10,4 @@/);});
-test('untrusted code is escaped and excerpt numbers are not fabricated',()=>{const html=renderDiff({rangeKind:'excerpt',lines:['+<script>'],newStart:1},'unified');assert.ok(!html.includes('<script>'));assert.match(html,/&lt;script&gt;/);assert.match(html,/·/);});
+import test from "node:test";
+import assert from "node:assert/strict";
+import { alignedRows, patchText, renderDiff } from "../ui/diff.js";
+test("split aligns replacements and preserves independent line numbers", () => {
+  const h = {
+    path: "a",
+    oldStart: 10,
+    newStart: 10,
+    lines: [" context", "-old", "+new", "+extra", " tail"],
+  };
+  const r = alignedRows(h);
+  assert.equal(r[1][0].old, 11);
+  assert.equal(r[1][1].next, 11);
+  assert.equal(r[2][0], undefined);
+  assert.equal(r[3][0].old, 12);
+  assert.equal(r[3][1].next, 13);
+  assert.match(patchText(h), /@@ -10,3 \+10,4 @@/);
+});
+test("untrusted code is escaped and excerpt numbers are not fabricated", () => {
+  const html = renderDiff(
+    { rangeKind: "excerpt", lines: ["+<script>"], newStart: 1 },
+    "unified",
+  );
+  assert.ok(!html.includes("<script>"));
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /·/);
+});
