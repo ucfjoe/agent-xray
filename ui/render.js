@@ -142,7 +142,13 @@ function map(snapshot, p, state) {
   const { positions, width, height } = layoutGraph(
     nodes,
     deps,
-    globalThis.innerWidth < 760,
+    // Match the map grid: sidebar below 760px, otherwise inspector uses
+    // max(300px, 40%). Choose layout for the map pane, not the full window.
+    (globalThis.innerWidth < 760
+      ? globalThis.innerWidth
+      : globalThis.innerWidth - Math.max(300, globalThis.innerWidth * 0.4)) -
+      32 <
+      650,
   );
   const edges = deps.filter(
     (d) => positions.has(d.from) && positions.has(d.to),

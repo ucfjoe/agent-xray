@@ -69,6 +69,11 @@ for (const scheme of ["light", "dark"])
       });
       for (const view of ["Story", "Changes", "Map", "Journey"]) {
         await page.getByRole("tab", { name: view, exact: true }).click();
+        if (view === "Map" && width === 900)
+          await expect(page.locator(".graph")).toHaveAttribute(
+            "viewBox",
+            /^0 0 310 /,
+          );
         expect(
           await page.evaluate(
             () => document.documentElement.scrollWidth <= innerWidth,
