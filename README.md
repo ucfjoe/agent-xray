@@ -10,6 +10,6 @@ The prototype was reconstructed from the Agent X-Ray design discussion. It uses 
 
 ## DeepSeek Harness test lab
 
-Agent X-Ray now includes a DSH web plugin and a repeatable test lab. Open its session tab to inspect real tracked Git changes in the configured sample repository. The standalone demo above remains available.
+Agent X-Ray now includes a DSH web plugin and a repeatable test lab. Open Agent X-Ray from the right sidebar’s Start page to inspect real tracked Git changes in the configured sample repository. The standalone demo above remains available.
 
 See [test lab setup and current boundaries](docs/test-lab.md). GitHub Codespaces configuration and an Ubuntu GitHub Actions smoke test are included. Live task attribution and test-execution evidence remain to implement.

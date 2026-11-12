@@ -180,7 +180,9 @@ if (live) {
   status.setAttribute("role", "status");
   const refresh = document.createElement("button");
   refresh.textContent = "Refresh Git changes";
-  byId("panel").prepend(status, refresh);
+  status.className = "source-note";
+  byId("panel").querySelector("header").append(refresh);
+  byId("panel").append(status);
   async function loadChanges() {
     refresh.disabled = true;
     status.textContent = "Reading test repository…";
