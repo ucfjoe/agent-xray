@@ -42,5 +42,5 @@ Files: plugin/index.js, plugin/review-service.js (new); test/review-service.test
 Interface: readReview({services,store,sessionId,snapshotId,scope}) validates host session identity; requested historical snapshots use only saved data and optional checkpoint supplements, no realpath/current workspace replay. Current and workspace routes preserve prior behavior.
 - [x] Test saved reads after directory removal and denied/mismatched sessions; missing snapshot remains 404.
 - [x] Implement read service and stable supplemental enrichment without rewriting saved aggregate.
-- [ ] Run unit, cloud browser, native host, package import and CI checks; capture contextual-evidence screenshot.
-- [ ] Independent expert reviews of evidence and history; fix material findings with regression tests. Open reviewable PR; no merge or installation.
+- [x] Run unit, cloud browser, native host, package import and CI checks; capture contextual-evidence screenshot.
+- [x] Independent expert reviews of evidence and history; fix material findings with regression tests. Open reviewable PR; no merge or installation.

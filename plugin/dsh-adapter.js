@@ -369,7 +369,8 @@ export async function readSessionReview(
   }
   model.capture = {
     checkpointSeq: checkpointSeq ?? null,
-    complete: checkpointComplete,
+    scope: checkpointSeq === undefined ? "bounded-review" : "checkpoint",
+    complete: checkpointSeq === undefined ? null : checkpointComplete,
   };
   model.title = model.objectives.at(-1)?.title ?? "Session review";
   model.activity =
