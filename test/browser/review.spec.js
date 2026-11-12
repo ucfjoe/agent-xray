@@ -232,7 +232,16 @@ test("figures show real relationships and drive the shared selection", async ({
     page.getByRole("tab", { name: "Journey", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "Map", exact: true }).click();
-  await expect(page.locator(".graph-edge").first()).toBeVisible();
+  // Horizontal SVG paths have a zero-height geometry box, even when painted.
+  await expect(page.locator(".graph")).toBeVisible();
+  const edge = await page.locator(".graph-edge").first().evaluate((node) => ({
+    length: node.getTotalLength(),
+    stroke: getComputedStyle(node).stroke,
+    opacity: getComputedStyle(node).opacity,
+  }));
+  expect(edge.length).toBeGreaterThan(0);
+  expect(edge.stroke).not.toBe("none");
+  expect(Number(edge.opacity)).toBeGreaterThan(0);
   await page.getByLabel("Zoom in").click();
   await expect(page.locator(".graph")).toHaveAttribute("style", "width:120%");
   await page.getByRole("button", { name: "Fit map", exact: true }).click();
