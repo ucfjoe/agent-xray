@@ -23,6 +23,17 @@ for (const theme of ["light", "dark"]) {
         path: `test-results/session-dependencies-${theme}-${width}.png`,
         fullPage: true,
       });
+      if (width === 900) {
+        for (const offset of [500, 1000, 1500]) {
+          await page.locator(".navigator").evaluate((node, top) => {
+            node.scrollTop = top;
+          }, offset);
+          await page.screenshot({
+            path: `test-results/session-dependencies-${theme}-${width}-scroll-${offset}.png`,
+            fullPage: true,
+          });
+        }
+      }
     }
   });
 }
@@ -63,6 +74,8 @@ test("unresolved imports remain inspectable without invented edges", async ({
   await page.goto("/?live=1&session=languages");
   await page.getByRole("tab", { name: "Map", exact: true }).click();
   await page.getByText("1 unresolved imports", { exact: true }).click();
-  await expect(page.locator(".map-list").filter({ hasText: "1 unresolved imports" })).toContainText("@app/missing");
+  await expect(
+    page.locator(".map-list").filter({ hasText: "1 unresolved imports" }),
+  ).toContainText("@app/missing");
   await expect(page.locator(".graph-edge")).toHaveCount(4);
 });
