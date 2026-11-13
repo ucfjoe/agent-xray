@@ -1,3 +1,4 @@
+import { enrichRepositoryEvidence } from "./repository-evidence.js";
 import { analyzeSessionDependencies } from "../core/session-dependencies.js";
 import { recoverSession } from "./recover-session.js";
 import { readSessionReview } from "./dsh-adapter.js";
@@ -59,7 +60,10 @@ export async function readReview({
     latestSnapshotId = current.snapshotId;
   }
   const history = await store.list(sessionId);
-  const enriched = await enrichSaved(snapshot, store);
+  const enriched = await enrichRepositoryEvidence(
+    await enrichSaved(snapshot, store),
+    store,
+  );
   return {
     ...enriched,
     ...analyzeSessionDependencies(enriched),

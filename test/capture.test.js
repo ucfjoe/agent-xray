@@ -236,7 +236,8 @@ test("stalled host reads time out without blocking another session or publishing
       },
     };
     const q = createCaptureQueue({
-      timeoutMs: 20,
+      // Allow real filesystem publication under the parallel Git integration suite.
+      timeoutMs: 500,
       capture: (sessionId, seq, type, signal) =>
         captureReview({ services, store, sessionId, seq, type, signal }),
       onError: (id) => failures.push(id),
