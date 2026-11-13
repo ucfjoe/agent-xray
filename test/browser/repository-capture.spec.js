@@ -73,6 +73,7 @@ test("observed outside repository changes show precise scope and attribution", a
   await page.route("**/agent-xray/review?**", (route) =>
     route.fulfill({ json: snapshot }),
   );
+  await page.addInitScript(() => sessionStorage.clear());
   for (const theme of ["light", "dark"])
     for (const width of [380, 1000]) {
       await page.setViewportSize({ width, height: 900 });

@@ -1,5 +1,6 @@
-import { join, dirname } from "node:path";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 const run = promisify(execFile);
@@ -120,9 +121,17 @@ export function apply(ctx) {
 // Exercise the real tool registry and native bash implementation without an LLM.
 // Deliberately no supplied diff metadata: Agent X-Ray must observe filesystem deltas.
 async function runRepositoryFixture(ctx) {
-  const parent = await mkdtemp(
-    join(dirname(process.env.XRAY_TEST_REPOSITORY), "shell-contract-"),
-  );
+  // The native workspace-write policy permits host temp areas. Keep the
+  // controlled sibling repositories there; do not relax any production policy.
+  const parent = await mkdtemp(join(tmpdir(), "xray-shell-contract-"));
+  let handle;
+  ctx.effect(() => async () => {
+    try {
+      await handle?.dispose();
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
   const workspace = join(parent, "opened"),
     external = join(parent, "external"),
     worktree = join(parent, "linked-worktree");
@@ -160,7 +169,7 @@ async function runRepositoryFixture(ctx) {
   const presets = ctx.get("agentPresets");
   const preset = presets ? await presets.resolve(undefined) : undefined;
   let tools;
-  const handle = await ctx.get("agents").create({
+  handle = await ctx.get("agents").create({
     sessionId,
     meta: { cwd: workspace, ...(preset ? { agentPreset: preset.id } : {}) },
     setup: async (agentCtx) => {
@@ -171,9 +180,6 @@ async function runRepositoryFixture(ctx) {
   });
   const agent = handle.agent,
     session = agent.session;
-  ctx.effect(() => () => {
-    void handle.dispose();
-  });
   session.append("turn/start", { turn: 0 });
   session.append("step/start", { turn: 0, step: 0 });
   for (const [index, root] of [external, worktree].entries()) {
@@ -197,7 +203,11 @@ async function runRepositoryFixture(ctx) {
       agent,
       signal: AbortSignal.timeout(20000),
     });
-    if (result.isError)
+    if (
+      result.isError ||
+      result.value?.kind !== "foreground" ||
+      result.value.exitCode !== 0
+    )
       throw Error("Native fixture bash failed: " + JSON.stringify(result));
     session.append(
       "tool/result",
