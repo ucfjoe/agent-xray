@@ -155,11 +155,18 @@ async function runRepositoryFixture(ctx) {
     );
   }
   const sessionId = "xray-shell-capture";
+  // Web DSH moves Bash behind agent presets; a bare Agent has no shell tool.
+  // Mirror the native session controller's pre-publication composition.
+  const presets = ctx.get("agentPresets");
+  const preset = presets ? await presets.resolve(undefined) : undefined;
+  let tools;
   const handle = await ctx.get("agents").create({
     sessionId,
-    meta: { cwd: workspace },
-    setup: (agentCtx) => {
-      agentCtx.get("tools").presentAs("native");
+    meta: { cwd: workspace, ...(preset ? { agentPreset: preset.id } : {}) },
+    setup: async (agentCtx) => {
+      if (preset) await presets.mount(agentCtx, preset.id);
+      tools = agentCtx.get("tools");
+      tools.presentAs("native");
     },
   });
   const agent = handle.agent,
@@ -183,15 +190,13 @@ async function runRepositoryFixture(ctx) {
       name: "bash",
       arguments: JSON.stringify(args),
     });
-    const result = await ctx
-      .get("tools")
-      .execute({
-        callId,
-        name: "bash",
-        arguments: args,
-        agent,
-        signal: AbortSignal.timeout(20000),
-      });
+    const result = await tools.execute({
+      callId,
+      name: "bash",
+      arguments: args,
+      agent,
+      signal: AbortSignal.timeout(20000),
+    });
     if (result.isError)
       throw Error("Native fixture bash failed: " + JSON.stringify(result));
     session.append(

@@ -52,11 +52,14 @@ export function apply(ctx) {
   const captureFailures = new Map();
   const repositoryObserver = createRepositoryObserver({
     store,
-    onError: (id) =>
+    onError: (id) => {
+      if (captureFailures.size >= 100 && !captureFailures.has(id))
+        captureFailures.delete(captureFailures.keys().next().value);
       captureFailures.set(
         id,
         "Some repository observations could not be retained; coverage is incomplete.",
-      ),
+      );
+    },
   });
   const queue = createCaptureQueue({
     capture: (sessionId, seq, type, signal) =>
