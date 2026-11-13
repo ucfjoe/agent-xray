@@ -1,3 +1,4 @@
+import { analyzeSessionDependencies } from "../core/session-dependencies.js";
 import { recoverSession } from "./recover-session.js";
 import { readSessionReview } from "./dsh-adapter.js";
 import { readWorkspaceReview } from "./workspace.js";
@@ -58,8 +59,10 @@ export async function readReview({
     latestSnapshotId = current.snapshotId;
   }
   const history = await store.list(sessionId);
+  const enriched = await enrichSaved(snapshot, store);
   return {
-    ...(await enrichSaved(snapshot, store)),
+    ...enriched,
+    ...analyzeSessionDependencies(enriched),
     history: history.map((s) => ({
       id: s.snapshotId,
       time: s.capturedAt,

@@ -1,3 +1,4 @@
+import { mapDependencies } from "./map-data.js";
 import { pathLabel } from "./paths.js";
 import { projectCheck, checksForHunk } from "../core/verification.js";
 import { impactFigure, traceFigure, layoutGraph } from "./figures.js";
@@ -127,9 +128,7 @@ function map(snapshot, p, state) {
       "No changes to map",
       "Recorded changes or workspace changes will appear as selectable nodes.",
     );
-  const deps = (snapshot.dependencies ?? []).filter(
-    (d) => names.includes(d.from) || names.includes(d.to),
-  );
+  const deps = mapDependencies(snapshot, p.hunks);
   for (const h of p.hunks.filter((h) => h.symbol))
     deps.push({
       from: relations.find((r) => r.hunkId === h.id)?.target ?? h.path,
@@ -158,10 +157,27 @@ function map(snapshot, p, state) {
     ),
   );
   const incident = (d) => selectedNodes.has(d.from) || selectedNodes.has(d.to);
-  return `<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%;min-width:${Math.round((width * 0.92 * (state.mapZoom ?? 100)) / 100)}px${compact ? `;max-width:${(390 * (state.mapZoom ?? 100)) / 100}px` : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker><marker id="arrow-selected" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="selected-arrow" d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
+  const analysis = snapshot.dependencyAnalysis;
+  const unresolved = analysis?.unresolved ?? [];
+  const coverage = analysis
+    ? `<p class="map-note" role="status">${e(analysis.summary ?? "Dependency analysis covers recorded source evidence only.")} Imports do not establish runtime calls.</p>${
+        unresolved.length
+          ? `<details class="map-list"><summary>${unresolved.length} unresolved imports</summary><ul>${unresolved
+              .slice(0, 30)
+              .map(
+                (d) =>
+                  `<li><strong>${e(d.from)}</strong> → ${e(d.specifier)}<br>${e(d.reason)}</li>`,
+              )
+              .join(
+                "",
+              )}</ul>${unresolved.length > 30 ? "Showing the first 30 unresolved imports." : ""}</details>`
+          : ""
+      }`
+    : "";
+  return `${coverage}<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%;min-width:${Math.round((width * 0.92 * (state.mapZoom ?? 100)) / 100)}px${compact ? `;max-width:${(390 * (state.mapZoom ?? 100)) / 100}px` : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker><marker id="arrow-selected" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="selected-arrow" d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
     .map(
       (d) =>
-        `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""} ${incident(d) ? "selected" : ""}" d="${d.path}" marker-end="url(#${incident(d) ? "arrow-selected" : "arrow"})"><title>${e(d.from)} ${d.kind === "containment" ? "contains" : "depends on"} ${e(d.to)}</title></path>`,
+        `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""} ${incident(d) ? "selected" : ""}" d="${d.path}" marker-end="url(#${incident(d) ? "arrow-selected" : "arrow"})"><title>${e(d.evidenceFrom ?? d.from)} ${d.kind === "containment" ? "contains" : d.kind === "import" ? "imports from" : "depends on"} ${e(d.evidenceTo ?? d.to)}</title></path>`,
     )
     .join("")}${nodes
     .map((n) => {
