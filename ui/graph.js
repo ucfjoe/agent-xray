@@ -3,6 +3,70 @@ const CARD = 230,
   STEP = 14;
 const point = (x, y) => ({ x, y });
 export function layoutGraph(nodes, inputEdges, compact) {
+  const allowed = new Set(nodes);
+  const validEdges = inputEdges.filter(
+    (e) => allowed.has(e.from) && allowed.has(e.to),
+  );
+  const neighbors = new Map(nodes.map((n) => [n, []]));
+  for (const edge of validEdges) {
+    neighbors.get(edge.from).push(edge.to);
+    neighbors.get(edge.to).push(edge.from);
+  }
+  const visited = new Set(),
+    components = [];
+  for (const start of [...nodes].sort()) {
+    if (visited.has(start)) continue;
+    const pending = [start],
+      members = [];
+    visited.add(start);
+    while (pending.length) {
+      const node = pending.pop();
+      members.push(node);
+      for (const next of neighbors.get(node))
+        if (!visited.has(next)) {
+          visited.add(next);
+          pending.push(next);
+        }
+    }
+    const memberSet = new Set(members);
+    components.push({
+      nodes: members,
+      edges: validEdges.filter((e) => memberSet.has(e.from)),
+    });
+  }
+  if (components.length <= 1)
+    return layoutComponent(nodes, validEdges, compact);
+  // Unrelated dependency groups get separate horizontal bands. Their routes
+  // cannot intersect, and isolated nodes no longer displace connected pairs.
+  components.sort(
+    (a, b) =>
+      Number(!a.edges.length) - Number(!b.edges.length) ||
+      [...a.nodes].sort()[0].localeCompare([...b.nodes].sort()[0]),
+  );
+  const positions = new Map(),
+    edges = [];
+  let yOffset = 0,
+    width = 310;
+  for (const component of components) {
+    const graph = layoutComponent(component.nodes, component.edges, compact);
+    for (const [node, position] of graph.positions)
+      positions.set(node, { ...position, y: position.y + yOffset });
+    for (const edge of graph.edges) {
+      const points = edge.points.map((p) => ({ x: p.x, y: p.y + yOffset }));
+      edges.push({ ...edge, id: edges.length, points, path: pathFor(points) });
+    }
+    width = Math.max(width, graph.width);
+    yOffset +=
+      Math.max(
+        ...[...graph.positions.values()].map((p) => p.y + p.height),
+        ...graph.edges.flatMap((e) => e.points.map((p) => p.y)),
+      ) + GAP;
+  }
+  return { positions, edges, width, height: Math.max(220, yOffset) };
+}
+const pathFor = (points) =>
+  points.map((p, i) => (i ? "L" : "M") + p.x + "," + p.y).join(" ");
+function layoutComponent(nodes, inputEdges, compact) {
   const allowed = new Set(nodes),
     seen = new Set();
   const edges = inputEdges
@@ -102,9 +166,14 @@ export function layoutGraph(nodes, inputEdges, compact) {
       n,
       Math.max(
         66,
-        ...["left", "right"].map(
-          (s) => 24 + 12 * ((ports.get(n + "\0" + s)?.length ?? 1) - 1),
-        ),
+        24 +
+          12 *
+            (["left", "right"].reduce(
+              (count, side) =>
+                count + (ports.get(n + "\0" + side)?.length ?? 0),
+              0,
+            ) -
+              1),
       ),
     ]),
   );
@@ -120,20 +189,56 @@ export function layoutGraph(nodes, inputEdges, compact) {
     if (!columns.has(col)) columns.set(col, []);
     columns.get(col).push(n);
   }
+  const rowPorts = new Map(),
+    nodeRow = new Map();
+  for (const ns of columns.values())
+    for (const [row, n] of ns.entries()) {
+      nodeRow.set(n, row);
+      if (!rowPorts.has(row)) rowPorts.set(row, []);
+      for (const side of ["left", "right"])
+        rowPorts.get(row).push(...(ports.get(n + "\0" + side) ?? []));
+    }
+  // In a shared gutter, routes to lower rows take the nearer rails. This
+  // keeps a short route from crossing a longer sibling's vertical segment.
+  for (const col of columns.keys()) {
+    const across = edges.filter(
+      (e) => e.mode === "across" && level.get(e.from) === col,
+    );
+    const lanes = across.map((e) => e.lane).sort((a, b) => a - b);
+    across.sort(
+      (a, b) =>
+        nodeRow.get(b.to) - nodeRow.get(a.to) ||
+        index.get(a.from) - index.get(b.from),
+    );
+    across.forEach((e, i) => {
+      e.lane = lanes[i];
+    });
+  }
+  const rowHeight = (row) =>
+    Math.max(66, 24 + 12 * ((rowPorts.get(row)?.length ?? 1) - 1));
   for (const [col, ns] of columns) {
     let y = 28 + outerCount * STEP;
     for (const n of ns) {
       positions.set(n, {
         x: leftSpace + col * (CARD + gutterWidth),
         y,
-        height: heights.get(n),
+        height: compact ? heights.get(n) : rowHeight(nodeRow.get(n)),
       });
-      y += heights.get(n) + GAP;
+      y += (compact ? heights.get(n) : rowHeight(nodeRow.get(n))) + GAP;
     }
   }
   const port = (n, side, key) => {
     const r = positions.get(n),
-      list = ports.get(n + "\0" + side),
+      // Opposite sides must not reuse the same y on a shared gutter.
+      list =
+        side === "left" || side === "right"
+          ? compact
+            ? [
+                ...(ports.get(n + "\0left") ?? []),
+                ...(ports.get(n + "\0right") ?? []),
+              ]
+            : rowPorts.get(nodeRow.get(n))
+          : ports.get(n + "\0" + side),
       i = list.indexOf(key);
     const along =
       side === "left" || side === "right"
@@ -187,9 +292,7 @@ export function layoutGraph(nodes, inputEdges, compact) {
         b,
       ];
     }
-    e.path = e.points
-      .map((p, i) => (i ? "L" : "M") + p.x + "," + p.y)
-      .join(" ");
+    e.path = pathFor(e.points);
   }
   return {
     positions,

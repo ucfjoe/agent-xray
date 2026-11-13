@@ -92,3 +92,119 @@ test("diamond relationships have no crossings in either layout", () => {
       }
   }
 });
+
+function assertNoSharedSegments(g) {
+  const segments = g.edges.flatMap((edge, id) =>
+    edge.points.slice(1).map((b, i) => ({ id, a: edge.points[i], b })),
+  );
+  for (let i = 0; i < segments.length; i++)
+    for (let j = i + 1; j < segments.length; j++) {
+      const s = segments[i],
+        t = segments[j];
+      if (s.id === t.id) continue;
+      const overlap = (a, b, c, d) =>
+        Math.min(Math.max(a, b), Math.max(c, d)) -
+          Math.max(Math.min(a, b), Math.min(c, d)) >
+        1e-6;
+      const vertical =
+        s.a.x === s.b.x &&
+        t.a.x === t.b.x &&
+        s.a.x === t.a.x &&
+        overlap(s.a.y, s.b.y, t.a.y, t.b.y);
+      const horizontal =
+        s.a.y === s.b.y &&
+        t.a.y === t.b.y &&
+        s.a.y === t.a.y &&
+        overlap(s.a.x, s.b.x, t.a.x, t.b.x);
+      assert.ok(
+        !vertical && !horizontal,
+        `Edges ${s.id} and ${t.id} share a segment`,
+      );
+    }
+}
+
+test("real five-language session map never merges unrelated routes", async () => {
+  const { dependencySession } = await import(
+    "./fixtures/dependency-session.js"
+  );
+  const { mapDependencies } = await import("../ui/map-data.js");
+  const snapshot = await dependencySession();
+  const names = [
+    ...new Set(
+      snapshot.relationships
+        .filter((r) => r.kind === "module")
+        .map((r) => r.target),
+    ),
+  ];
+  const es = mapDependencies(snapshot, snapshot.hunks);
+  for (const compact of [true, false]) {
+    const g = layoutGraph(names, es, compact);
+    assertClear(g);
+    assertNoSharedSegments(g);
+    if (!compact)
+      assert.ok(
+        g.height < 1000,
+        "Wide layout must keep parallel column rows, not a sparse staircase",
+      );
+  }
+});
+
+test("distinct edges retain separate rails across deterministic varied graphs", () => {
+  let seed = 42;
+  const random = () =>
+    (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+  for (let sample = 0; sample < 120; sample++) {
+    const ns = Array.from(
+      { length: 2 + Math.floor(random() * 9) },
+      (_, i) => "node" + i,
+    );
+    const es = Array.from({ length: Math.floor(random() * 20) }, () => ({
+      from: ns[Math.floor(random() * ns.length)],
+      to: ns[Math.floor(random() * ns.length)],
+    }));
+    for (const compact of [true, false]) {
+      const g = layoutGraph(ns, es, compact);
+      assertClear(g);
+      assertNoSharedSegments(g);
+    }
+  }
+});
+
+test("disconnected components occupy separate bands with isolates last", () => {
+  const ns = ["00 isolated", "a", "b", "c", "d", "z"];
+  const es = [
+    { from: "a", to: "b" },
+    { from: "b", to: "a" },
+    { from: "c", to: "d" },
+    { from: "z", to: "z" },
+  ];
+  for (const compact of [true, false]) {
+    const g = layoutGraph(ns, es, compact);
+    assertClear(g);
+    assertNoSharedSegments(g);
+    const bands = [["a", "b"], ["c", "d"], ["z"]].map((members) => {
+      const relevant = g.edges.filter((e) => members.includes(e.from));
+      return {
+        min: Math.min(
+          ...members.map((n) => g.positions.get(n).y),
+          ...relevant.flatMap((e) => e.points.map((p) => p.y)),
+        ),
+        max: Math.max(
+          ...members.map(
+            (n) => g.positions.get(n).y + g.positions.get(n).height,
+          ),
+          ...relevant.flatMap((e) => e.points.map((p) => p.y)),
+        ),
+      };
+    });
+    for (let i = 1; i < bands.length; i++)
+      assert.ok(
+        bands[i].min > bands[i - 1].max,
+        "Independent components must never cross or overlap",
+      );
+    assert.ok(
+      g.positions.get("00 isolated").y > bands.at(-1).max,
+      "Isolates follow connected groups",
+    );
+  }
+});

@@ -269,6 +269,7 @@ export async function readSessionReview(
             rangeKind: "excerpt",
             eventId: call.eventId,
             sourceId: id(e),
+            seq: e.seq,
             snapshotId,
           };
           attach(h, e, call);
@@ -426,6 +427,7 @@ export async function readSessionReview(
             rangeKind: "file",
             eventId: id(e),
             sourceId: id(e),
+            seq: e.seq,
             snapshotId,
           };
           // Per-turn workspace capture is observed scope, not proof of authorship in concurrent sessions.
