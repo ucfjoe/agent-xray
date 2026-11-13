@@ -154,7 +154,7 @@ async function runRepositoryFixture(ctx) {
       "unrelated pre-existing dirt\n",
     );
   }
-  const sessionId = "xray-shell-capture";
+  const sessionId = "xray-shell-capture-" + parent.split("/").at(-1);
   // Web DSH moves Bash behind agent presets; a bare Agent has no shell tool.
   // Mirror the native session controller's pre-publication composition.
   const presets = ctx.get("agentPresets");
