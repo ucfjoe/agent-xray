@@ -3,6 +3,70 @@ const CARD = 230,
   STEP = 14;
 const point = (x, y) => ({ x, y });
 export function layoutGraph(nodes, inputEdges, compact) {
+  const allowed = new Set(nodes);
+  const validEdges = inputEdges.filter(
+    (e) => allowed.has(e.from) && allowed.has(e.to),
+  );
+  const neighbors = new Map(nodes.map((n) => [n, []]));
+  for (const edge of validEdges) {
+    neighbors.get(edge.from).push(edge.to);
+    neighbors.get(edge.to).push(edge.from);
+  }
+  const visited = new Set(),
+    components = [];
+  for (const start of [...nodes].sort()) {
+    if (visited.has(start)) continue;
+    const pending = [start],
+      members = [];
+    visited.add(start);
+    while (pending.length) {
+      const node = pending.pop();
+      members.push(node);
+      for (const next of neighbors.get(node))
+        if (!visited.has(next)) {
+          visited.add(next);
+          pending.push(next);
+        }
+    }
+    const memberSet = new Set(members);
+    components.push({
+      nodes: members,
+      edges: validEdges.filter((e) => memberSet.has(e.from)),
+    });
+  }
+  if (components.length <= 1)
+    return layoutComponent(nodes, validEdges, compact);
+  // Unrelated dependency groups get separate horizontal bands. Their routes
+  // cannot intersect, and isolated nodes no longer displace connected pairs.
+  components.sort(
+    (a, b) =>
+      Number(!a.edges.length) - Number(!b.edges.length) ||
+      [...a.nodes].sort()[0].localeCompare([...b.nodes].sort()[0]),
+  );
+  const positions = new Map(),
+    edges = [];
+  let yOffset = 0,
+    width = 310;
+  for (const component of components) {
+    const graph = layoutComponent(component.nodes, component.edges, compact);
+    for (const [node, position] of graph.positions)
+      positions.set(node, { ...position, y: position.y + yOffset });
+    for (const edge of graph.edges) {
+      const points = edge.points.map((p) => ({ x: p.x, y: p.y + yOffset }));
+      edges.push({ ...edge, id: edges.length, points, path: pathFor(points) });
+    }
+    width = Math.max(width, graph.width);
+    yOffset +=
+      Math.max(
+        ...[...graph.positions.values()].map((p) => p.y + p.height),
+        ...graph.edges.flatMap((e) => e.points.map((p) => p.y)),
+      ) + GAP;
+  }
+  return { positions, edges, width, height: Math.max(220, yOffset) };
+}
+const pathFor = (points) =>
+  points.map((p, i) => (i ? "L" : "M") + p.x + "," + p.y).join(" ");
+function layoutComponent(nodes, inputEdges, compact) {
   const allowed = new Set(nodes),
     seen = new Set();
   const edges = inputEdges
@@ -228,9 +292,7 @@ export function layoutGraph(nodes, inputEdges, compact) {
         b,
       ];
     }
-    e.path = e.points
-      .map((p, i) => (i ? "L" : "M") + p.x + "," + p.y)
-      .join(" ");
+    e.path = pathFor(e.points);
   }
   return {
     positions,

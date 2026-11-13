@@ -169,3 +169,42 @@ test("distinct edges retain separate rails across deterministic varied graphs", 
     }
   }
 });
+
+test("disconnected components occupy separate bands with isolates last", () => {
+  const ns = ["00 isolated", "a", "b", "c", "d", "z"];
+  const es = [
+    { from: "a", to: "b" },
+    { from: "b", to: "a" },
+    { from: "c", to: "d" },
+    { from: "z", to: "z" },
+  ];
+  for (const compact of [true, false]) {
+    const g = layoutGraph(ns, es, compact);
+    assertClear(g);
+    assertNoSharedSegments(g);
+    const bands = [["a", "b"], ["c", "d"], ["z"]].map((members) => {
+      const relevant = g.edges.filter((e) => members.includes(e.from));
+      return {
+        min: Math.min(
+          ...members.map((n) => g.positions.get(n).y),
+          ...relevant.flatMap((e) => e.points.map((p) => p.y)),
+        ),
+        max: Math.max(
+          ...members.map(
+            (n) => g.positions.get(n).y + g.positions.get(n).height,
+          ),
+          ...relevant.flatMap((e) => e.points.map((p) => p.y)),
+        ),
+      };
+    });
+    for (let i = 1; i < bands.length; i++)
+      assert.ok(
+        bands[i].min > bands[i - 1].max,
+        "Independent components must never cross or overlap",
+      );
+    assert.ok(
+      g.positions.get("00 isolated").y > bands.at(-1).max,
+      "Isolates follow connected groups",
+    );
+  }
+});

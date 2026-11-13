@@ -23,14 +23,35 @@ for (const theme of ["light", "dark"]) {
         path: `test-results/session-dependencies-${theme}-${width}.png`,
         fullPage: true,
       });
-      if (width === 900) {
+      if (width >= 900) {
         for (const offset of [500, 1000, 1500]) {
-          await page.locator(".navigator").evaluate((node, top) => {
+          const scrolling = await page.evaluate((top) => {
+            const candidates = [
+              ...document.querySelectorAll(".navigator,.graph-scroll"),
+            ];
+            const node = candidates.sort(
+              (a, b) =>
+                b.scrollHeight -
+                b.clientHeight -
+                (a.scrollHeight - a.clientHeight),
+            )[0];
             node.scrollTop = top;
+            return {
+              selector: "." + node.classList[0],
+              maximum: node.scrollHeight - node.clientHeight,
+            };
           }, offset);
+          if (scrolling.maximum > 0)
+            await expect
+              .poll(() =>
+                page
+                  .locator(scrolling.selector)
+                  .evaluate((node) => node.scrollTop),
+              )
+              .toBeGreaterThan(0);
           await page.screenshot({
             path: `test-results/session-dependencies-${theme}-${width}-scroll-${offset}.png`,
-            fullPage: true,
+            fullPage: false,
           });
         }
       }
