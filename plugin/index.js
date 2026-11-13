@@ -1,3 +1,4 @@
+import { createRepositoryObserver } from "./repository-observer.js";
 import { createCaptureQueue } from "./capture-queue.js";
 import { captureReview } from "./checkpoints.js";
 import { readFile } from "node:fs/promises";
@@ -49,6 +50,17 @@ export function apply(ctx) {
     readCheckpoint: (id, seq) => store.getCheckpoint(id, seq),
   });
   const captureFailures = new Map();
+  const repositoryObserver = createRepositoryObserver({
+    store,
+    onError: (id) => {
+      if (captureFailures.size >= 100 && !captureFailures.has(id))
+        captureFailures.delete(captureFailures.keys().next().value);
+      captureFailures.set(
+        id,
+        "Some repository observations could not be retained; coverage is incomplete.",
+      );
+    },
+  });
   const queue = createCaptureQueue({
     capture: (sessionId, seq, type, signal) =>
       captureReview({
@@ -68,12 +80,20 @@ export function apply(ctx) {
       );
     },
   });
-  if (typeof ctx.on === "function")
+  if (typeof ctx.on === "function") {
+    ctx.on("tools/execute", (exec, next) =>
+      repositoryObserver.execute(exec, next),
+    );
     ctx.on("session/event", (session, event) => {
+      repositoryObserver.onEvent(session, event);
       if (["workspace/changes", "turn/end"].includes(event.type))
         queue.enqueue(session.id, event.seq, event.type);
     });
-  ctx.effect(() => () => queue.dispose());
+  }
+  ctx.effect(() => () => {
+    queue.dispose();
+    repositoryObserver.dispose();
+  });
   ctx.effect(
     () =>
       ctx.get("webServer").register({
@@ -108,6 +128,7 @@ export function apply(ctx) {
           try {
             if (url.pathname === "/agent-xray/review") {
               const sessionId = url.searchParams.get("session");
+              await repositoryObserver.flush(sessionId);
               const result = await readReview({
                 services: services(),
                 store,

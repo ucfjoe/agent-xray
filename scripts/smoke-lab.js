@@ -87,9 +87,47 @@ try {
       headers,
     });
     assert.notEqual(absent.status, 200);
+    const exercised = await fetch(base + "/xray-contract/repositories", {
+      method: "POST",
+      headers,
+    });
+    const fixture = await exercised.json();
+    assert.equal(exercised.status, 200, JSON.stringify(fixture));
+    let observed;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const response = await fetch(
+        base + "/agent-xray/review?session=" + fixture.sessionId,
+        { headers },
+      );
+      observed = await response.json();
+      if (
+        response.status === 200 &&
+        observed.hunks?.filter((h) => h.attribution === "interval-only")
+          .length >= 2
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const deltas = observed.hunks.filter(
+      (h) => h.attribution === "interval-only",
+    );
+    assert.equal(deltas.length, 2, JSON.stringify(observed));
+    for (const root of [fixture.external, fixture.worktree]) {
+      const h = deltas.find((h) => h.path === root + "/changed.txt");
+      assert.ok(h, "Missing observed shell write in " + root);
+      assert.equal(h.locationScope, "outside-workspace");
+      assert.ok(
+        h.lines.some((line) => line.startsWith("+observed shell write")),
+      );
+      assert.ok(!h.lines.some((line) => line.startsWith("+pre-existing")));
+    }
+    assert.ok(
+      !observed.hunks.some((h) => h.path.endsWith("/existing.txt")),
+      "Pre-existing dirt must not become a session edit",
+    );
   }
   console.log(
-    "Real DSH smoke test passed: plugin assets, Git changes, authentication and enabled session contracts.",
+    "Real DSH smoke test passed: plugin assets, Git changes, authentication, enabled session contracts and native cross-repository shell capture.",
   );
 } finally {
   child.kill("SIGTERM");

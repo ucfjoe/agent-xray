@@ -1,3 +1,4 @@
+import { boundRepositoryRecord } from "./repository-record.js";
 import {
   mkdir,
   readFile,
@@ -34,6 +35,75 @@ async function publish(path, value) {
 }
 export function createHistoryStore(root) {
   return {
+    async putRepositoryCapture(sessionId, seq, callId, capture) {
+      if (
+        capture.sessionId !== sessionId ||
+        capture.seq !== seq ||
+        !Number.isSafeInteger(seq) ||
+        seq < 0 ||
+        typeof callId !== "string"
+      )
+        throw Error("Repository capture identity mismatch");
+      const bounded = boundRepositoryRecord(capture);
+      const dir = join(root, key(sessionId), "repository-captures");
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      return publish(
+        join(dir, String(seq).padStart(20, "0") + "-" + key(callId) + ".json"),
+        bounded,
+      );
+    },
+    async getRepositoryCaptures(sessionId, throughSeq) {
+      if (!Number.isSafeInteger(throughSeq) || throughSeq < 0) return [];
+      const dir = join(root, key(sessionId), "repository-captures");
+      let names;
+      try {
+        names = await readdir(dir);
+      } catch (error) {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      }
+      const selected = names
+        .filter(
+          (n) =>
+            /^\d{20}-[a-f0-9]{64}\.json$/.test(n) &&
+            Number(n.slice(0, 20)) <= throughSeq,
+        )
+        .sort()
+        .reverse()
+        .slice(0, 100);
+      const result = [];
+      let bytes = 0,
+        omitted = false;
+      for (const name of selected) {
+        const file = join(dir, name),
+          size = (await stat(file)).size;
+        if (bytes + size > 4000000) {
+          omitted = true;
+          continue;
+        }
+        const capture = JSON.parse(await readFile(file, "utf8"));
+        bytes += size;
+        if (capture.sessionId === sessionId && capture.seq <= throughSeq)
+          result.push(capture);
+      }
+      if (
+        selected.length <
+          names.filter(
+            (n) => /^\d{20}-/.test(n) && Number(n.slice(0, 20)) <= throughSeq,
+          ).length ||
+        result.length < selected.length ||
+        omitted
+      )
+        result.push({
+          sessionId,
+          seq: throughSeq,
+          observations: [],
+          notices: [
+            "Repository observation history limit reached; older intervals are omitted.",
+          ],
+        });
+      return result.reverse();
+    },
     async putCheckpoint(sessionId, seq, checkpoint) {
       if (
         checkpoint.sessionId !== sessionId ||
