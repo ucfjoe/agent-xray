@@ -56,6 +56,7 @@ test("repository sidecars survive restart, are immutable/session-isolated, and r
   const current = { ...snapshot, identity: { throughSeq: 4 } };
   const enriched = await enrichRepositoryEvidence(current, restarted);
   assert.equal(enriched.hunks.length, 1);
+  assert.equal(enriched.events[0].type, "observation");
   assert.equal(enriched.hunks[0].path, "/other/a.ts");
   assert.equal(enriched.hunks[0].attribution, "interval-only");
   assert.equal(

@@ -22,7 +22,7 @@ export async function enrichRepositoryEvidence(snapshot, store) {
       id: eventId,
       seq: record.seq,
       time: record.capturedAt,
-      type: "action",
+      type: "observation",
       title: "Observed repository changes during command",
       status: "recorded",
       hunkIds: [],
