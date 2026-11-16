@@ -2,6 +2,7 @@ import { normalizeSnapshot, fromExample, projectReview } from "./core/model.js";
 import { initialState, reduceReview, restoreState } from "./ui/state.js";
 import { render } from "./ui/render.js";
 import { patchText } from "./ui/diff.js";
+import { installLinking, playEntrance } from "./ui/motion.js";
 const params = new URLSearchParams(location.search),
   sessionId = params.get("session") ?? "";
 let source = params.has("live") ? "session" : "demo",
@@ -51,6 +52,10 @@ function draw() {
     pending,
     history,
   });
+  playEntrance(
+    root,
+    [source, scenario, state.view, snapshot.snapshotId].join("|"),
+  );
   for (const [cls, top, left] of positions) {
     const node = root.getElementsByClassName(cls)[0];
     if (node) {
@@ -146,6 +151,7 @@ async function load({ background = false } = {}) {
     if (request === controller) request = null;
   }
 }
+installLinking(root);
 root.addEventListener("click", async (event) => {
   const line = event.target.closest("[data-code-line]");
   if (line) {

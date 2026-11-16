@@ -23,7 +23,7 @@ export function impactFigure(snapshot, hunks) {
   return `<figure class="impact-figure"><figcaption><strong>Change footprint</strong><span>Lines added / removed</span></figcaption><svg viewBox="0 0 300 ${height}" role="img" aria-label="Changed lines by file"><title>Change footprint: largest changed files, by added and removed lines</title>${rows
     .map((r, i) => {
       const y = i * 38 + 6;
-      return `<g class="impact-row" data-select="${e(r.id)}" tabindex="0" role="button" aria-label="Inspect ${e(r.path)}, ${r.added} added and ${r.deleted} removed"><rect class="impact-hit" x="0" y="${y - 2}" width="300" height="34" fill="transparent"/><text x="0" y="${y + 10}" class="impact-label">${e(pathLabel(r.path, [...files.keys()]).slice(0, 40))}</text><text x="298" y="${y + 10}" text-anchor="end" class="impact-value">+${r.added} −${r.deleted}</text><rect class="impact-track" x="0" y="${y + 18}" width="300" height="5" rx="2.5"/><rect class="impact-add" x="0" y="${y + 18}" width="${(r.added / max) * 300}" height="5" rx="2.5"/><rect class="impact-del" x="${(r.added / max) * 300}" y="${y + 18}" width="${(r.deleted / max) * 300}" height="5" rx="2.5"/></g>`;
+      return `<g class="impact-row" data-select="${e(r.id)}" tabindex="0" role="button" aria-label="Inspect ${e(r.path)}, ${r.added} added and ${r.deleted} removed"><rect class="impact-hit" x="0" y="${y - 2}" width="300" height="34" fill="transparent"/><text x="0" y="${y + 10}" class="impact-label">${e(pathLabel(r.path, [...files.keys()]).slice(0, 40))}</text><text x="298" y="${y + 10}" text-anchor="end" class="impact-value">+${r.added} −${r.deleted}</text><rect class="impact-track" x="0" y="${y + 18}" width="300" height="5" rx="2.5"/><g class="impact-bars" style="--bar-y:${y + 20.5}px"><rect class="impact-add" x="0" y="${y + 18}" width="${(r.added / max) * 300}" height="5" rx="2.5"/><rect class="impact-del" x="${(r.added / max) * 300}" y="${y + 18}" width="${(r.deleted / max) * 300}" height="5" rx="2.5"/></g></g>`;
     })
     .join(
       "",
@@ -38,6 +38,22 @@ function intentSource(objective) {
   return objective.selection === "inferred"
     ? "User request, inferred"
     : "User request";
+}
+
+// The verification stage is coloured by what happened, never by the stage
+// itself: a failed run drawn in the success colour contradicts its own label.
+function verificationOutcome(check) {
+  if (!check) return "unknown";
+  if (check.status === "passed") return "passed";
+  if (check.status === "failed" || check.toolOutcome === "failed")
+    return "failed";
+  if (check.status === "pending") return "pending";
+  return "unknown";
+}
+function verificationIcon(check) {
+  return { passed: "✓", failed: "✕", pending: "…", unknown: "?" }[
+    verificationOutcome(check)
+  ];
 }
 
 export function traceFigure(snapshot, hunk) {
@@ -74,7 +90,7 @@ export function traceFigure(snapshot, hunk) {
     },
     {
       label: "Verification",
-      icon: "✓",
+      icon: verificationIcon(check),
       title:
         check?.status === "not verified"
           ? "Not verified"
@@ -86,8 +102,9 @@ export function traceFigure(snapshot, hunk) {
             ? "Context only · not verified"
             : "No exact-change proof",
       action: "trace-check",
+      outcome: verificationOutcome(check),
     },
   ];
-  return `<figure class="trace-figure"><figcaption>Evidence trail <span>${snapshot.source === "demo" ? "Example relationships" : "What connects this change"}</span></figcaption><div class="trace-grid">${nodes.map((n, i) => `<button class="trace-node ${n.source === "Unknown" || n.title === "Not established" || n.title === "Not verified" ? "unknown" : ""}" data-action="${n.action}" title="${e(n.title)}"><span class="trace-label"><b>${n.icon}</b>${i + 1}. ${n.label}</span><strong>${e(n.title)}</strong><small>${e(n.source)}</small><span class="trace-arrow" aria-hidden="true">→</span></button>`).join("")}</div></figure>`;
+  return `<figure class="trace-figure"><figcaption>Evidence trail <span>${snapshot.source === "demo" ? "Example relationships" : "What connects this change"}</span></figcaption><div class="trace-grid">${nodes.map((n, i) => `<button class="trace-node ${n.source === "Unknown" || n.title === "Not established" || n.title === "Not verified" ? "unknown" : ""}${n.outcome ? " outcome-" + n.outcome : ""}" data-action="${n.action}" title="${e(n.title)}"><span class="trace-label"><b>${n.icon}</b>${i + 1}. ${n.label}</span><strong>${e(n.title)}</strong><small>${e(n.source)}</small><span class="trace-arrow" aria-hidden="true">→</span></button>`).join("")}</div></figure>`;
 }
 export { layoutGraph } from "./graph.js";

@@ -24,6 +24,7 @@ const assets = new Map(
     "ui/paths.js",
     "ui/graph.js",
     "ui/map-data.js",
+    "ui/motion.js",
   ].map((path) => [
     "/agent-xray/" + path,
     [

@@ -1118,3 +1118,388 @@ figure {
 .graph marker .selected-arrow {
   fill: var(--accent);
 }
+
+/* ==========================================================================
+   Visual refresh: semantic palette, depth and motion.
+   Every hue is derived from host tokens where one exists, so DSH themes still
+   win. Motion is one-shot and never runs under prefers-reduced-motion.
+   ========================================================================== */
+
+:root {
+  /* Five evidence roles, readable in both schemes. */
+  --role-intent: light-dark(#6d4fd8, #b4a3ff);
+  --role-action: light-dark(#0f7fa8, #6fcbea);
+  --role-code: var(--accent);
+  --role-verify: light-dark(#1f8a5b, #7fd4a8);
+  --role-risk: light-dark(#b86a10, #f2b866);
+  --role-unknown: var(--muted);
+
+  --elev-1:
+    0 1px 2px color-mix(in srgb, #000 6%, transparent),
+    0 1px 1px color-mix(in srgb, #000 4%, transparent);
+  --elev-2:
+    0 6px 18px -6px color-mix(in srgb, #000 18%, transparent),
+    0 2px 6px -2px color-mix(in srgb, #000 10%, transparent);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --fast: 140ms;
+  --base: 220ms;
+  --slow: 420ms;
+}
+
+/* Header: brand mark gets a soft gradient and a breathing activity dot. */
+.brand-mark {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--role-intent) 16%, var(--bg)),
+    color-mix(in srgb, var(--accent) 16%, var(--bg))
+  );
+  box-shadow: var(--elev-1);
+}
+.activity i {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 45%, transparent);
+  animation: xray-breathe 2.4s var(--ease-out) infinite;
+}
+
+/* Overview: a faint accent wash so the headline reads as the page's anchor. */
+.overview {
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, var(--accent) 7%, transparent),
+      transparent 60%
+    ),
+    var(--bg);
+}
+
+/* Tabs: an underline that slides between views instead of jumping. */
+.view-bar button {
+  position: relative;
+  border-bottom-color: transparent !important;
+  transition: color var(--fast) var(--ease-out);
+}
+.view-bar button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--base) var(--ease-out);
+}
+.view-bar button[aria-selected="true"]::after {
+  transform: scaleX(1);
+}
+.view-bar button:hover {
+  color: var(--text);
+  background: none;
+}
+
+/* Interactive surfaces share one hover and press language. */
+.file-row,
+.event-link,
+.trace-node,
+.graph-node rect,
+button {
+  transition:
+    background-color var(--fast) var(--ease-out),
+    border-color var(--fast) var(--ease-out),
+    box-shadow var(--base) var(--ease-out),
+    color var(--fast) var(--ease-out),
+    transform var(--base) var(--ease-spring),
+    opacity var(--base) var(--ease-out);
+}
+.file-row:hover {
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.file-row:active,
+.trace-node:active {
+  transform: scale(0.985);
+}
+.file-row.selected {
+  box-shadow:
+    inset 2px 0 0 var(--accent),
+    var(--elev-1);
+}
+
+/* Story groups read as a numbered sequence with a rail. */
+.step-number {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  line-height: 1;
+}
+.story-files {
+  border-left: 1px dashed color-mix(in srgb, var(--accent) 22%, var(--border));
+  margin-left: 15px;
+  padding-left: 14px;
+}
+
+/* Evidence trail: each stage takes its role color. */
+.trace-node {
+  --role: var(--role-unknown);
+  border-color: color-mix(in srgb, var(--role) 28%, var(--border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--role) 7%, var(--bg)),
+    var(--surface)
+  );
+}
+.trace-node:nth-child(1) {
+  --role: var(--role-intent);
+}
+.trace-node:nth-child(2) {
+  --role: var(--role-action);
+}
+.trace-node:nth-child(3) {
+  --role: var(--role-code);
+}
+.trace-node:nth-child(4) {
+  --role: var(--role-unknown);
+}
+.trace-node.outcome-passed {
+  --role: var(--role-verify);
+}
+.trace-node.outcome-failed {
+  --role: var(--red);
+}
+.trace-node.outcome-pending {
+  --role: var(--role-risk);
+}
+.trace-node.unknown {
+  --role: var(--role-unknown);
+  background: var(--surface);
+}
+.trace-label b {
+  color: var(--role);
+}
+.trace-node:hover:not(.unknown) {
+  transform: translateY(-2px);
+  box-shadow: var(--elev-2);
+  border-color: color-mix(in srgb, var(--role) 50%, var(--border));
+}
+.trace-arrow {
+  color: color-mix(in srgb, var(--accent) 55%, var(--muted));
+}
+
+/* Journey: dots take the role of the event they mark. */
+.timeline-event {
+  border-left-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+}
+.timeline-event.action .timeline-dot {
+  background: var(--role-action);
+}
+.timeline-event.checkpoint .timeline-dot {
+  background: var(--role-code);
+  border-radius: 2px;
+}
+.timeline-event.request .timeline-dot {
+  background: var(--role-intent);
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 0 0 4px color-mix(in srgb, var(--role-intent) 18%, transparent);
+}
+.timeline-event.request h2 {
+  color: var(--role-intent);
+  background: color-mix(in srgb, var(--role-intent) 8%, var(--bg));
+  border-color: color-mix(in srgb, var(--role-intent) 22%, var(--border));
+}
+.timeline-event.status-question .timeline-dot {
+  background: var(--bg);
+  box-shadow: 0 0 0 1.5px var(--muted);
+}
+.timeline-event.status-question h2 {
+  color: var(--muted);
+  font-weight: 450;
+  font-style: italic;
+}
+
+/* Badges: process outcome and verification carry meaning in color. */
+.badge {
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.badge.process {
+  color: var(--role-action);
+  border-color: color-mix(in srgb, var(--role-action) 30%, var(--border));
+  background: color-mix(in srgb, var(--role-action) 7%, var(--bg));
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.badge.failed {
+  background: color-mix(in srgb, var(--red) 8%, var(--bg));
+  border-color: color-mix(in srgb, var(--red) 30%, var(--border));
+}
+
+/* Map: softer canvas, lifted nodes, role-tinted selection. */
+.graph-scroll {
+  background:
+    radial-gradient(
+        circle at 1px 1px,
+        color-mix(in srgb, var(--muted) 22%, transparent) 1px,
+        transparent 0
+      )
+      0 0 / 16px 16px,
+    var(--surface);
+}
+.graph-node rect {
+  filter: drop-shadow(0 1px 1.5px color-mix(in srgb, #000 8%, transparent));
+}
+.graph-node[role="button"]:hover rect {
+  stroke: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.graph-node.selected rect {
+  stroke-width: 1.5;
+}
+
+/* Impact bars. */
+.impact-add {
+  fill: var(--green);
+  opacity: 0.85;
+}
+.impact-del {
+  fill: var(--red);
+  opacity: 0.8;
+}
+.impact-row:hover .impact-track {
+  fill: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+/* ---- Cross-figure linking: hovering a change lights it up everywhere. ---- */
+#app[data-linking] .is-linked.file-row,
+#app[data-linking] .is-linked.event-link {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  box-shadow: var(--ring);
+}
+#app[data-linking] .impact-row.is-linked .impact-label {
+  fill: var(--accent);
+  font-weight: 600;
+}
+#app[data-linking] .graph-node.is-linked rect {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+#app[data-graph-focus] .graph-edge {
+  opacity: 0.14;
+  transition: opacity var(--base) var(--ease-out);
+}
+#app[data-graph-focus] .graph-edge.is-linked {
+  opacity: 1;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+#app[data-graph-focus] .graph-node:not(.is-linked) {
+  opacity: 0.45;
+}
+.graph-node {
+  transition: opacity var(--base) var(--ease-out);
+}
+
+/* ---- Entrance: plays once per new screen, never per keystroke. ---- */
+#app[data-enter] .story-group,
+#app[data-enter] .file-group,
+#app[data-enter] .timeline-event,
+#app[data-enter] .trace-node {
+  animation: xray-rise var(--slow) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 32ms);
+}
+/* The outer node carries its layout translate; animating it would override
+   that and collapse every node into the corner. Only the inner body moves. */
+#app[data-enter] .graph-node .node-body {
+  animation: xray-pop var(--slow) var(--ease-spring) both;
+  animation-delay: calc(120ms + var(--i, 0) * 40ms);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+#app[data-enter] .graph-edge {
+  stroke-dasharray: 1;
+  animation: xray-draw 700ms var(--ease-out) 260ms both;
+}
+#app[data-enter] .graph-edge.containment {
+  animation: none;
+}
+#app[data-enter] .impact-bars {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: xray-grow 620ms var(--ease-out) both;
+  animation-delay: calc(80ms + var(--i, 0) * 45ms);
+}
+#app[data-enter] .inspector > * {
+  animation: xray-fade var(--base) var(--ease-out) both;
+}
+
+@keyframes xray-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xray-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xray-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes xray-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes xray-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes xray-breathe {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 45%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--green) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .view-bar button::after {
+    transition: none;
+  }
+}
