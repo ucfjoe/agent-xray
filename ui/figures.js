@@ -29,6 +29,17 @@ export function impactFigure(snapshot, hunks) {
       "",
     )}</svg><p>${snapshot.scope === "session" ? "Recorded edit volume; repeated edits are not a net repository diff." : "Largest changes in this review."}</p></figure>`;
 }
+function intentSource(objective) {
+  if (!objective) return "Unknown";
+  if (objective.selection === "agent-todo") return "Agent todo, declared";
+  if (objective.selection === "acknowledgement-referent")
+    return "Inferred from acknowledgement";
+  if (objective.provenance === "inferred") return "Inferred";
+  return objective.selection === "inferred"
+    ? "User request, inferred"
+    : "User request";
+}
+
 export function traceFigure(snapshot, hunk) {
   const task = snapshot.relationships.find(
     (r) => r.hunkId === hunk.id && r.kind === "task",
@@ -41,7 +52,7 @@ export function traceFigure(snapshot, hunk) {
       label: "Intent",
       icon: "◎",
       title: objective?.title ?? "Not linked",
-      source: objective ? "User request" : "Unknown",
+      source: intentSource(objective),
       action: "trace-intent",
     },
     {

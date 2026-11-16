@@ -1,10 +1,17 @@
 import { sessionPath } from "./session-path.js";
-import { classifyPaths } from "../core/evidence.js";
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { isAbsolute, normalize } from "node:path";
 import { structuredPatch } from "diff";
 import { normalizeSnapshot } from "../core/model.js";
+import {
+  ackReferent,
+  classifyMessage,
+  cleanObjective,
+  rulesVersion,
+  selectCandidate,
+  todoObjective,
+} from "../core/objectives.js";
 const digest = (x) =>
   createHash("sha256").update(JSON.stringify(x)).digest("hex").slice(0, 24);
 const text = (content) =>
@@ -18,6 +25,179 @@ const clean = (s) =>
   String(s ?? "")
     .replace(/\b(sk-[\w-]{12,}|Bearer\s+[\w.-]+)\b/g, "[redacted]")
     .slice(0, 16000);
+
+// Derivation runs after the event scan because an objective is only knowable once
+// its turn has closed. Everything it emits carries a label: words the user wrote
+// stay `declared`; selection, carries and titles are `inferred`.
+function deriveObjectives({
+  model,
+  turnMessages,
+  turnAssistant,
+  turnTodos,
+  settledByCallId,
+}) {
+  const turns = new Set([
+    ...turnMessages.keys(),
+    ...turnAssistant.keys(),
+    ...turnTodos.keys(),
+  ]);
+  const objectiveByTurn = new Map();
+  const changeCount = new Map();
+  let carried;
+  for (const turn of [...turns].sort((a, b) => a - b)) {
+    const messages = turnMessages.get(turn) ?? [];
+    const assistant = turnAssistant.get(turn) ?? [];
+    const priorAssistant = assistant.map((a) => a.text).join("\n");
+    const candidates = [];
+    let acknowledgement = false;
+    for (const message of messages) {
+      const { dropped, rule } = classifyMessage({
+        text: message.text,
+        sourceKind: message.sourceKind,
+        priorAssistantText: priorAssistant,
+      });
+      if (!dropped) {
+        candidates.push(message);
+        continue;
+      }
+      if (rule === "R3-brief-ack" || rule === "R4-agreement")
+        acknowledgement = true;
+      model.events.push({
+        id: message.id + ":unaligned",
+        seq: message.seq,
+        time: message.time,
+        // A status question is a step in the session, not a goal; it stays in the
+        // Journey. Everything else that is dropped stays out of the timeline.
+        type:
+          rule === "R8-status-question"
+            ? "status-question"
+            : "unaligned-request",
+        title: cleanObjective(message.text),
+        rule,
+        turn,
+        hunkIds: [],
+      });
+    }
+    let chosen = selectCandidate(candidates);
+    let provenance = "declared";
+    let selection;
+    let sourceId;
+    let derivedFrom;
+    if (!chosen && acknowledgement) {
+      const referent = ackReferent({ assistantMessages: assistant });
+      if (referent) {
+        chosen = {
+          id: "ack:" + turn,
+          seq: messages.at(-1)?.seq ?? -1,
+          time: messages.at(-1)?.time,
+          text: referent.text,
+        };
+        // The words are the agent's, so this is an inference even though the
+        // decision to take them came from a user acknowledgement.
+        provenance = "inferred";
+        selection = "acknowledgement-referent";
+        sourceId = referent.sourceId;
+        derivedFrom = messages.map((m) => m.seq);
+      }
+    }
+    if (!chosen) {
+      const todo = todoObjective(turnTodos.get(turn) ?? []);
+      if (todo) {
+        chosen = {
+          id: "todo:" + turn,
+          seq: messages.at(-1)?.seq ?? turn,
+          time: messages.at(-1)?.time,
+          text: todo.text,
+        };
+        provenance = "declared";
+        selection = "agent-todo";
+        sourceId = todo.sourceId;
+      }
+    }
+    if (chosen) {
+      const objective = {
+        id: "objective:" + turn,
+        turn,
+        seq: Number.isInteger(chosen.seq) ? chosen.seq : turn,
+        time: chosen.time,
+        title: cleanObjective(chosen.text),
+        text: chosen.text,
+        provenance,
+        selection: selection ?? "request",
+        derivedFrom: derivedFrom ?? [chosen.seq].filter(Number.isInteger),
+        sourceId: sourceId ?? chosen.id,
+      };
+      model.objectives.push(objective);
+      objectiveByTurn.set(turn, objective);
+      model.events.push({
+        id: objective.id + ":request",
+        seq: chosen.seq,
+        time: chosen.time,
+        type: "request",
+        title: objective.title,
+        turn,
+        objectiveId: objective.id,
+        hunkIds: [],
+      });
+      carried = objective;
+    } else if (carried) {
+      // Work that continues an earlier objective is attributed to it, explicitly
+      // as a continuation rather than as a new request.
+      objectiveByTurn.set(turn, carried);
+    }
+  }
+
+  for (const hunk of model.hunks) {
+    const objective = objectiveByTurn.get(hunk.turn);
+    const sourceId = hunk.sourceId;
+    if (objective) {
+      model.relationships.push({
+        hunkId: hunk.id,
+        kind: "task",
+        target: objective.id,
+        provenance: objective.turn === hunk.turn ? "observed" : "inferred",
+        sourceId,
+        rationale:
+          objective.turn === hunk.turn
+            ? "Change recorded in the same turn as this request."
+            : "Continuation of the objective first stated in turn " +
+              objective.turn +
+              ".",
+      });
+      changeCount.set(objective.id, (changeCount.get(objective.id) ?? 0) + 1);
+    }
+    model.relationships.push({
+      hunkId: hunk.id,
+      kind: "milestone",
+      target: objective ? objective.title : "Unnamed work",
+      provenance: "inferred",
+      sourceId,
+    });
+  }
+
+  for (const event of model.events) {
+    if (!Number.isInteger(event.turn)) continue;
+    const objective = objectiveByTurn.get(event.turn);
+    if (event.type === "action" && objective) event.objectiveId = objective.id;
+    if (event.type === "checkpoint") {
+      const label = objective ? objective.title : "Unnamed work";
+      event.title = label + " · " + event.fileCount + " files changed";
+    }
+  }
+
+  for (const check of model.checks) {
+    const settled = settledByCallId.get(check.callId);
+    if (settled) check.processOutcome = settled;
+  }
+
+  const busiest = [...changeCount.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  )[0];
+  const headline = busiest && model.objectives.find((o) => o.id === busiest[0]);
+  model.title = headline?.title ?? "Session review";
+  model.derivationVersion = rulesVersion();
+  return model;
+}
 export async function readSessionReview(
   services,
   sessionId,
@@ -70,7 +250,8 @@ export async function readSessionReview(
     relationships: [],
     checks: [],
     notices: [],
-    milestones: [],
+    checkpoints: [],
+    derivationVersion: rulesVersion(),
     checkpointSeqs: raw
       .slice(-10000)
       .filter((e) => e.type === "workspace/changes")
@@ -78,29 +259,19 @@ export async function readSessionReview(
     files: [],
   };
   const calls = new Map();
-  let objective;
+  const turnMessages = new Map();
+  const turnAssistant = new Map();
+  const turnTodos = new Map();
+  const settledByCallId = new Map();
   let turn = 0;
   const id = (e) => sessionId + ":" + e.seq;
-  function attach(h, e, call) {
+  const at = (map, key) => {
+    if (!map.has(key)) map.set(key, []);
+    return map.get(key);
+  };
+  function attach(h, e) {
+    h.turn = Number.isInteger(e.data?.turn) ? e.data.turn : turn;
     model.hunks.push(h);
-    const sourceId = id(e);
-    if (call?.objectiveId)
-      model.relationships.push({
-        hunkId: h.id,
-        kind: "task",
-        target: call.objectiveId,
-        provenance: "observed",
-        sourceId,
-        rationale:
-          "File-tool result in the turn containing this request; this is turn context, not a semantic claim about every line.",
-      });
-    model.relationships.push({
-      hunkId: h.id,
-      kind: "milestone",
-      target: "Turn " + (e.data.turn ?? turn),
-      provenance: "observed",
-      sourceId,
-    });
     model.relationships.push({
       hunkId: h.id,
       kind: "module",
@@ -108,7 +279,7 @@ export async function readSessionReview(
         ? h.path.slice(0, h.path.lastIndexOf("/"))
         : "Repository root",
       provenance: "inferred",
-      sourceId,
+      sourceId: id(e),
       rationale: "Directory containment, not a dependency claim.",
     });
   }
@@ -125,35 +296,38 @@ export async function readSessionReview(
     const d = e.data ?? {};
     if (e.type === "turn/start") {
       turn = d.turn;
-      objective = undefined;
-      model.milestones.push({
-        id: id(e),
-        seq: e.seq,
-        title: "Turn " + turn,
-        time: e.time,
-      });
     }
     if (e.type === "user/message") {
-      // Only actual user input is an objective; injected system context is not.
-      const kind = d.source?.kind ?? d.source?.type;
-      const title = clean(text(d.content));
-      if (title && (!kind || ["user", "human", "user-input"].includes(kind))) {
-        objective = {
-          id: id(e),
-          title: title.slice(0, 180),
-          text: title,
-          provenance: "declared",
-          sourceId: id(e),
-        };
-        model.objectives.push(objective);
-        model.events.push({
+      // Objectives are derived after the turn closes; raw messages are collected
+      // here so the derivation sees the whole turn before it decides.
+      const body = clean(text(d.content));
+      if (body)
+        at(turnMessages, turn).push({
           id: id(e),
           seq: e.seq,
           time: e.time,
-          type: "request",
-          title: objective.title,
-          objectiveId: objective.id,
-          hunkIds: [],
+          text: body,
+          sourceKind: d.source?.kind ?? d.source?.type,
+        });
+    }
+    if (e.type === "assistant/message") {
+      const body = clean(text(d.message?.content ?? d.content));
+      if (body) at(turnAssistant, turn).push({ id: id(e), text: body });
+    }
+    if (e.type === "todo/write" && Array.isArray(d.todos))
+      at(turnTodos, turn).push({
+        seq: e.seq,
+        todos: d.todos.map((todo, i) => ({ id: id(e) + ":" + i, ...todo })),
+      });
+    if (e.type === "job/settled") {
+      const key = d.toolCall?.callId ?? d.toolCall?.toolCallId;
+      if (key) {
+        const exit = String(d.detail ?? "").match(/exit code:\s*(-?\d+)/);
+        settledByCallId.set(key, {
+          killed: d.status === "killed",
+          failed: d.status === "failed",
+          signal: String(d.detail ?? "").match(/signal:\s*(\S+)/)?.[1],
+          exit: exit ? Number(exit[1]) : null,
         });
       }
     }
@@ -168,7 +342,7 @@ export async function readSessionReview(
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
           args = parsed;
       } catch {}
-      const call = { ...d, args, eventId: id(e), objectiveId: objective?.id };
+      const call = { ...d, args, eventId: id(e) };
       calls.set(d.callId, call);
       model.events.push({
         id: id(e),
@@ -179,8 +353,8 @@ export async function readSessionReview(
         description: clean(
           args.description ?? args.command ?? args.file_path ?? args.path ?? "",
         ),
-        objectiveId: objective?.id,
         hunkIds: [],
+        turn,
         status: "pending",
       });
     }
@@ -282,23 +456,22 @@ export async function readSessionReview(
         model.checks.push({
           id: id(e),
           eventId: call.eventId,
+          callId: d.message?.toolCallId,
           hunkIds: [],
           command: clean(call.args.command),
           output,
           status: d.message?.isError ? "failed" : "recorded",
           toolOutcome: d.message?.isError ? "failed" : "unknown",
-          testOutcome: "unknown",
-          binding: "unlinked",
           provenance: "observed",
           snapshotId,
           seq: e.seq,
           time: e.time,
-          association:
-            "Command in this session; exact code snapshot not established.",
+          turn,
         });
       }
     }
     if (e.type === "workspace/changes") {
+      model.checkpoints.push({ seq: e.seq, turn: d.turn ?? turn });
       let comparisonComplete = true;
       const fileStart = model.files.length,
         hunkStart = model.hunks.length;
@@ -355,9 +528,10 @@ export async function readSessionReview(
         seq: e.seq,
         time: e.time,
         type: "checkpoint",
-        title: "Turn " + d.turn + " · " + summary.total + " files changed",
+        title: summary.total + " files changed",
+        fileCount: summary.total,
+        turn: d.turn ?? turn,
         hunkIds: [],
-        objectiveId: objective?.id,
       };
       if (summary.files.length > 100) {
         checkpointComplete = false;
@@ -478,12 +652,18 @@ export async function readSessionReview(
       );
     }
   }
+  deriveObjectives({
+    model,
+    turnMessages,
+    turnAssistant,
+    turnTodos,
+    settledByCallId,
+  });
   model.capture = {
     checkpointSeq: checkpointSeq ?? null,
     scope: checkpointSeq === undefined ? "bounded-review" : "checkpoint",
     complete: checkpointSeq === undefined ? null : checkpointComplete,
   };
-  model.title = model.objectives.at(-1)?.title ?? "Session review";
   model.activity =
     raw.at(-1)?.type === "turn/end" ? "Idle" : "Observed history";
   model.notices.push(
@@ -494,5 +674,5 @@ export async function readSessionReview(
     model.notices.push(
       "No recorded file edits found. Switch to Workspace to inspect current Git changes without session attribution.",
     );
-  return classifyPaths(normalizeSnapshot(model));
+  return normalizeSnapshot(model);
 }

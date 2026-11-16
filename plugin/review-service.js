@@ -4,6 +4,7 @@ import { recoverSession } from "./recover-session.js";
 import { readSessionReview } from "./dsh-adapter.js";
 import { readWorkspaceReview } from "./workspace.js";
 import { enrichSaved } from "./checkpoints.js";
+import { classifyPaths } from "../core/evidence.js";
 
 export async function readReview({
   services,
@@ -27,6 +28,16 @@ export async function readReview({
       throw Object.assign(Error("This historical snapshot is unavailable."), {
         statusCode: 404,
       });
+    if (snapshot.derivationVersion === undefined)
+      snapshot = {
+        ...snapshot,
+        notices: [
+          ...new Set([
+            ...(snapshot.notices ?? []),
+            "This saved review predates derived objectives; it is shown as recorded.",
+          ]),
+        ],
+      };
     if (
       snapshot.pathScopeVersion !== 2 &&
       Number.isSafeInteger(snapshot.identity?.throughSeq)
@@ -55,7 +66,22 @@ export async function readReview({
         root: current.root,
       });
     const retained = await store.get(sessionId, current.snapshotId);
-    snapshot = retained ? recoverSession(retained, current) : current;
+    // Never merge across derivation generations: the saved snapshot's raw message
+    // objectives would sit beside the derived one for the same turn and count twice.
+    snapshot =
+      retained && retained.derivationVersion === current.derivationVersion
+        ? recoverSession(retained, current)
+        : retained
+          ? {
+              ...current,
+              notices: [
+                ...new Set([
+                  ...(current.notices ?? []),
+                  "A saved review from before derived objectives was rebuilt from recorded history.",
+                ]),
+              ],
+            }
+          : current;
     await store.put(current);
     latestSnapshotId = current.snapshotId;
   }
@@ -64,9 +90,15 @@ export async function readReview({
     await enrichSaved(snapshot, store),
     store,
   );
-  return {
+  // Perspectives are applied here, not in the adapter: checkpoint recovery and
+  // repository evidence both add hunks after the session read returns, and a
+  // change without a perspective is a silent gap in every group count.
+  const analysed = classifyPaths({
     ...enriched,
     ...analyzeSessionDependencies(enriched),
+  });
+  return {
+    ...analysed,
     history: history.map((s) => ({
       id: s.snapshotId,
       time: s.capturedAt,
