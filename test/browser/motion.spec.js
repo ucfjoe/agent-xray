@@ -113,3 +113,71 @@ test("reduced motion disables entrance and transitions", async ({ page }) => {
     .evaluate((n) => getComputedStyle(n).transitionDuration);
   expect(duration.split(",").every((d) => parseFloat(d) === 0)).toBe(true);
 });
+
+test("filtered messages stay out of the Journey until asked for, with a reason", async ({
+  page,
+}) => {
+  await page.route("**/agent-xray/review?**", (route) =>
+    route.fulfill({
+      json: {
+        source: "live",
+        scope: "session",
+        sessionId: "f",
+        snapshotId: "f1",
+        title: "Filtered fixture",
+        hunks: [],
+        objectives: [{ id: "o", title: "Fix the cart total", turn: 1 }],
+        relationships: [],
+        checks: [],
+        notices: [],
+        events: [
+          {
+            id: "r",
+            seq: 2,
+            time: 2,
+            type: "request",
+            title: "Fix the cart total",
+            objectiveId: "o",
+            hunkIds: [],
+          },
+          {
+            id: "u",
+            seq: 3,
+            time: 3,
+            type: "unaligned-request",
+            title: "go for it",
+            rule: "R4-agreement",
+            hunkIds: [],
+          },
+          {
+            id: "q",
+            seq: 4,
+            time: 4,
+            type: "status-question",
+            title: "what now ?",
+            hunkIds: [],
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/?live=1&session=f");
+  await page.getByRole("tab", { name: "Journey", exact: true }).click();
+  // Status questions are steps and always visible; filtered messages are not.
+  await expect(page.locator(".timeline-event.status-question")).toHaveCount(1);
+  await expect(page.locator(".timeline-event.unaligned-request")).toHaveCount(
+    0,
+  );
+  const toggle = page.getByRole("button", { name: "Show 1 filtered message" });
+  await toggle.click();
+  const row = page.locator(".timeline-event.unaligned-request");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("go for it");
+  await expect(row.locator(".filter-reason")).toHaveText(
+    "Agreement or approval",
+  );
+  await page.getByRole("button", { name: "Hide 1 filtered message" }).click();
+  await expect(page.locator(".timeline-event.unaligned-request")).toHaveCount(
+    0,
+  );
+});

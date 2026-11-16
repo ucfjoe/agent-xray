@@ -5,6 +5,7 @@ import { readSessionReview } from "./dsh-adapter.js";
 import { readWorkspaceReview } from "./workspace.js";
 import { enrichSaved } from "./checkpoints.js";
 import { classifyPaths } from "../core/evidence.js";
+import { attributeByTurn } from "../core/objectives.js";
 
 export async function readReview({
   services,
@@ -93,6 +94,9 @@ export async function readReview({
   // Perspectives are applied here, not in the adapter: checkpoint recovery and
   // repository evidence both add hunks after the session read returns, and a
   // change without a perspective is a silent gap in every group count.
+  // Saved checkpoints restore hunks after derivation; label them by turn too.
+  // Only snapshots built by the derivation have objectives keyed by turn.
+  if (enriched.derivationVersion !== undefined) attributeByTurn(enriched);
   const analysed = classifyPaths({
     ...enriched,
     ...analyzeSessionDependencies(enriched),

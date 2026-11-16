@@ -395,14 +395,27 @@ The measurement tool's independent "report-only" proxy is narrower than the rule
 it checks and still flags request-shaped questions. It is reported as a signal,
 not as a pass or fail; the unit tests are the authority on rule behaviour.
 
-### Known gaps carried forward
+### Gaps closed on 2026-11-16 (0.5.0)
 
-- A saved snapshot without `derivationVersion` does not yet render the
-  pre-derivation notice.
-- `recoverSession` can merge objectives written before this change beside derived
-  ones for the same turn; no reconciliation keyed by turn exists yet.
-- Checkpoint records written before this change still carry `Turn N` milestone
-  targets.
-- Background job output is not yet joined from the later `job_output` result.
-- The Journey hides `unaligned-request` events; they are retained but not
-  browsable.
+- **Pre-derivation snapshots** carry a notice and are never merged with derived
+  objectives for the same turn (generation guard in `readReview`).
+- **Restored checkpoints** no longer re-inject turn-number labels. Their hunks
+  recover a turn from the saved label and are attributed by the same rule as live
+  hunks. On a real session restored from the cache: 36 of 50 milestone labels
+  were bare `Turn N` before, 0 after; all 50 task links resolve.
+- **Background jobs** show the job's own output. Of 56 background commands in a
+  measured session, 41 now show completed output, 4 show partial output labelled
+  as partial, and 11 were never read and say so.
+- **Filtered messages** are browsable from the Journey behind a toggle, each with
+  the reason it was not treated as a request.
+- **Acknowledgement referents** now require a first-person commitment
+  ("I'll …", "Let me …"). Advice and conditional summaries no longer become
+  objectives; this was found by reading real milestone labels, not by a test.
+
+### Still open
+
+- The adapter reads only the latest 10,000 events, so in long sessions earlier
+  background jobs and objectives are outside the preview. This is the existing
+  bounded-capture limit, stated in the snapshot notices.
+- Language-aware agreement detection for non-space-separated scripts.
+- Stronger command binding (workspace hash at command time), deferred by author.

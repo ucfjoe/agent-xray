@@ -198,3 +198,40 @@ test("a trailing question mark alone marks a status question", () => {
     "R8-status-question",
   );
 });
+
+test("a referent is a commitment the agent made, not advice or a summary", () => {
+  assert.equal(
+    ackReferent({
+      assistantMessages: [
+        {
+          id: "m",
+          text: "When you commit, the four logical pieces are separable: the contracts, the test and the report.",
+        },
+      ],
+    }),
+    undefined,
+  );
+  assert.equal(
+    ackReferent({
+      assistantMessages: [
+        {
+          id: "m",
+          text: "Two of its findings contradict my measurements, so I'll check them myself.",
+        },
+      ],
+    }),
+    undefined,
+  );
+  const referent = ackReferent({
+    assistantMessages: [
+      {
+        id: "m",
+        text: "The suite is green. I'll merge the branch and update the installed plugin.",
+      },
+    ],
+  });
+  assert.equal(
+    referent?.text,
+    "I'll merge the branch and update the installed plugin.",
+  );
+});
