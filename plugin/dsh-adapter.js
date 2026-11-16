@@ -35,6 +35,7 @@ function deriveObjectives({
   turnAssistant,
   turnTodos,
   settledByCallId,
+  jobOutputs = new Map(),
 }) {
   const turns = new Set([
     ...turnMessages.keys(),
@@ -188,6 +189,21 @@ function deriveObjectives({
   for (const check of model.checks) {
     const settled = settledByCallId.get(check.callId);
     if (settled) check.processOutcome = settled;
+    if (!check.jobId) continue;
+    const read = jobOutputs.get(check.jobId);
+    if (read?.body) {
+      check.launchOutput = check.output;
+      check.output = read.body;
+      check.outputSource = read.completed ? "job-output" : "job-output-partial";
+      const exit = /\[status: \w+, exit code: (-?\d+)\]/.exec(read.body);
+      if (exit && !Number.isInteger(check.processOutcome?.exit))
+        check.processOutcome = {
+          ...(check.processOutcome ?? {}),
+          exit: Number(exit[1]),
+        };
+    } else {
+      check.outputSource = "not-recorded";
+    }
   }
 
   const busiest = [...changeCount.entries()].sort(
@@ -263,6 +279,7 @@ export async function readSessionReview(
   const turnAssistant = new Map();
   const turnTodos = new Map();
   const settledByCallId = new Map();
+  const jobOutputs = new Map();
   let turn = 0;
   const id = (e) => sessionId + ":" + e.seq;
   const at = (map, key) => {
@@ -450,6 +467,19 @@ export async function readSessionReview(
           action.hunkIds.push(h.id);
         }
       }
+      if (call.name === "job_output" && typeof call.args.job_id === "string") {
+        const body = clean(text(d.message?.content));
+        const previous = jobOutputs.get(call.args.job_id);
+        // A completed read supersedes a still-running one; otherwise keep the latest.
+        if (
+          !previous?.completed ||
+          /\[status: (completed|failed|killed)/.test(body)
+        )
+          jobOutputs.set(call.args.job_id, {
+            body,
+            completed: /\[status: (completed|failed|killed)/.test(body),
+          });
+      }
       if (typeof call.args.command === "string") {
         const output = clean(text(d.message?.content));
         // Record execution evidence without equating a successful tool invocation to passing tests.
@@ -460,6 +490,11 @@ export async function readSessionReview(
           hunkIds: [],
           command: clean(call.args.command),
           output,
+          jobId:
+            /^started background job (bash-[0-9a-f]+)$/.exec(
+              output.trim(),
+            )?.[1] ??
+            /moved to background job (bash-[0-9a-f]+)\]/.exec(output)?.[1],
           status: d.message?.isError ? "failed" : "recorded",
           toolOutcome: d.message?.isError ? "failed" : "unknown",
           provenance: "observed",
@@ -658,6 +693,7 @@ export async function readSessionReview(
     turnAssistant,
     turnTodos,
     settledByCallId,
+    jobOutputs,
   });
   model.capture = {
     checkpointSeq: checkpointSeq ?? null,

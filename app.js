@@ -209,6 +209,8 @@ root.addEventListener("click", async (event) => {
     await load();
   }
   if (action === "back") dispatch({ patch: { detail: false } });
+  if (action === "toggle-filtered")
+    dispatch({ patch: { showFiltered: !state.showFiltered } });
   if (action === "follow") {
     dispatch({ patch: { follow: !state.follow, historyId: "" } });
     if (state.follow) await load();

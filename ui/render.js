@@ -80,19 +80,45 @@ function explorer(p, state) {
       : empty("No matching changes", "Try another search or objective."))
   );
 }
+// Background commands return a launch line; their real output arrives later.
+// Say which one the reader is looking at.
+const OUTPUT_NOTE = {
+  "job-output": "Output read from the background job.",
+  "job-output-partial":
+    "Partial output: the job was still running when last read.",
+  "not-recorded": "Background job output was never read in this session.",
+};
+const outputNote = (c) =>
+  OUTPUT_NOTE[c.outputSource]
+    ? `<small class="output-note">${OUTPUT_NOTE[c.outputSource]}</small>`
+    : "";
+
+// Why the derivation did not treat a message as an objective, in reader terms.
+const FILTER_REASON = {
+  "R1-injected": "Not a user request: harness or delegated prompt",
+  "R2-link": "Link without a stated ask",
+  "R3-brief-ack": "Too brief to state a goal",
+  "R4-agreement": "Agreement or approval",
+  "R5-quoted": "Quoted back from an earlier agent message",
+  "R6-unattributed": "Unattributed text with no request shape",
+};
+
 const EVENT_LABEL = {
   request: "Request",
   action: "Action",
   checkpoint: "Checkpoint",
   "status-question": "Question",
-  "unaligned-request": "Unaligned request",
+  "unaligned-request": "Filtered",
 };
 
 function journey(snapshot, p, state) {
   const ids = new Set(p.hunks.map((h) => h.id));
+  const filtered = snapshot.events.filter(
+    (ev) => ev.type === "unaligned-request",
+  ).length;
   const events = newestFirst(snapshot.events).filter(
     (ev) =>
-      ev.type !== "unaligned-request" &&
+      (state.showFiltered || ev.type !== "unaligned-request") &&
       (!state.objectiveId || ev.objectiveId === state.objectiveId),
   );
   if (!events.length)
@@ -100,10 +126,13 @@ function journey(snapshot, p, state) {
       "No recorded activity",
       "Workspace diffs have no agent timeline. Select Session to review recorded actions.",
     );
-  return `<div class="section-heading"><span>SESSION JOURNEY</span><span>${events.length} events · Newest first</span></div><ol class="timeline">${events
+  const toggle = filtered
+    ? `<button class="filter-toggle" data-action="toggle-filtered" aria-pressed="${state.showFiltered ? "true" : "false"}">${state.showFiltered ? "Hide" : "Show"} ${filtered} filtered ${filtered === 1 ? "message" : "messages"}</button>`
+    : "";
+  return `<div class="section-heading"><span>SESSION JOURNEY</span><span>${events.length} events · Newest first</span></div>${toggle}<ol class="timeline">${events
     .map((ev) => {
       const linked = (ev.hunkIds ?? []).filter((id) => ids.has(id));
-      return `<li class="timeline-event ${e(ev.type)}"><span class="timeline-dot"></span><div class="event-meta"><span>${e(EVENT_LABEL[ev.type] ?? ev.type)}</span><time>${Number.isFinite(ev.time) ? new Date(ev.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Time unavailable"}</time></div><h2>${e(ev.title)}</h2>${ev.description ? `<p class="event-description">${e(ev.description)}</p>` : ""}<div>${linked
+      return `<li class="timeline-event ${e(ev.type)}"><span class="timeline-dot"></span><div class="event-meta"><span>${e(EVENT_LABEL[ev.type] ?? ev.type)}</span><time>${Number.isFinite(ev.time) ? new Date(ev.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Time unavailable"}</time></div><h2>${e(ev.title)}</h2>${ev.type === "unaligned-request" && ev.rule ? `<p class="filter-reason">${e(FILTER_REASON[ev.rule] ?? "Not treated as a request")}</p>` : ""}${ev.description ? `<p class="event-description">${e(ev.description)}</p>` : ""}<div>${linked
         .map((id) => {
           const h = snapshot.hunks.find((h) => h.id === id);
           return button(
@@ -241,7 +270,7 @@ function detail(snapshot, h, state, p) {
     )
     .join(
       "",
-    )}</div>${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.processOutcome ? `<span class="badge process">${e(c.processOutcome)}</span>` : ""}${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
+    )}</div>${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.processOutcome ? `<span class="badge process">${e(c.processOutcome)}</span>` : ""}${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code>${outputNote(c)}<pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
 }
 export function render(
   snapshot,
@@ -302,7 +331,7 @@ export function render(
           .map((c) => projectCheck(snapshot, c))
           .map(
             (c) =>
-              `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.processOutcome ? `<span class="badge process">${e(c.processOutcome)}</span>` : ""}${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`,
+              `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.processOutcome ? `<span class="badge process">${e(c.processOutcome)}</span>` : ""}${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code>${outputNote(c)}<pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`,
           )
           .join("")}</details>`
       : ""

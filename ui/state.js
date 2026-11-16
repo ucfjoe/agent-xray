@@ -9,6 +9,7 @@ export const initialState = () => ({
   follow: false,
   detail: false,
   historyId: "",
+  showFiltered: false,
   scroll: {},
 });
 export function reduceReview(state, action) {

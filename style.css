@@ -1503,3 +1503,41 @@ button {
     transition: none;
   }
 }
+
+.output-note {
+  display: block;
+  margin: 6px 0 -2px;
+  font-size: 10px;
+  color: var(--role-action);
+}
+
+.filter-toggle {
+  margin: -8px 4px 14px;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.filter-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  border-style: solid;
+}
+.timeline-event.unaligned-request {
+  opacity: 0.72;
+}
+.timeline-event.unaligned-request .timeline-dot {
+  background: var(--bg);
+  box-shadow: 0 0 0 1.5px var(--border);
+}
+.timeline-event.unaligned-request h2 {
+  font-weight: 450;
+  color: var(--muted);
+  text-decoration: line-through
+    color-mix(in srgb, var(--muted) 45%, transparent);
+}
+.filter-reason {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 3px;
+}

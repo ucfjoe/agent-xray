@@ -176,8 +176,6 @@ const OBJECT_NOUNS = [
   "deployment",
   "release",
 ];
-const ACTION_SENTENCE =
-  /\b(i'll|i will|let me|we'll|we will|next|now|then)\b|\b(add|build|change|check|create|delete|edit|fix|implement|move|remove|rename|replace|run|test|update|verify|write)\b/;
 
 export const RULES = [
   {
@@ -307,18 +305,25 @@ export function selectCandidate(candidates) {
 
 // When every candidate in a turn was an acknowledgement, the referent of that
 // acknowledgement is already recorded: the assistant sentence it answers.
+// When every candidate in a turn was an acknowledgement, the referent of that
+// acknowledgement is already recorded: the assistant sentence it answers. Only a
+// first-person statement of what the agent will do counts; advice, summaries and
+// conditionals ("When you commit, ...") describe nothing the user approved.
+const COMMITMENT =
+  /^(i'll|i will|i'm going to|let me|next,? i|now i|i can now|i'll now|i am going to)\b/;
 export function ackReferent({ assistantMessages = [] }) {
   for (let i = assistantMessages.length - 1; i >= 0; i--) {
     const sentences = String(assistantMessages[i].text ?? "")
       .split(/(?<=[.!?])\s+|\n+/)
-      .map((s) => s.trim())
+      .map((s) => s.replace(/^[-*>#\d.)\s]+/, "").trim())
       .filter(Boolean);
     for (let j = sentences.length - 1; j >= 0; j--) {
       const sentence = sentences[j];
+      const value = normalize(sentence);
       if (
-        normalize(sentence).split(" ").length >= 5 &&
-        !sentence.endsWith("?") &&
-        ACTION_SENTENCE.test(normalize(sentence))
+        COMMITMENT.test(value) &&
+        value.split(" ").length >= 4 &&
+        !sentence.endsWith("?")
       )
         return { text: sentence, sourceId: assistantMessages[i].id };
     }
@@ -356,4 +361,90 @@ export function cleanObjective(text, limit = 120) {
     value = cut.slice(0, Math.max(cut.lastIndexOf(" "), limit - 12)) + "…";
   }
   return value;
+}
+
+// Evidence restored from saved checkpoints arrives after derivation, carrying the
+// turn-number labels it was saved with. Recover each hunk's turn and attribute it
+// with the same rule live hunks use: the objective of that turn, or the latest
+// earlier one it continues.
+const TURN_LABEL = /^Turn (\d+)$/;
+const CHECKPOINT_TITLE = /^Turn (\d+) · (\d+) files changed$/;
+
+export function attributeByTurn(snapshot) {
+  const objectives = (snapshot.objectives ?? [])
+    .filter((o) => Number.isInteger(o.turn))
+    .sort((a, b) => a.turn - b.turn);
+  const objectiveFor = (turn) => {
+    let found;
+    for (const objective of objectives) {
+      if (objective.turn > turn) break;
+      found = objective;
+    }
+    return found;
+  };
+  const relationships = snapshot.relationships ?? [];
+  for (const hunk of snapshot.hunks ?? []) {
+    if (Number.isInteger(hunk.turn)) continue;
+    const label = relationships.find(
+      (r) => r.hunkId === hunk.id && r.kind === "milestone",
+    );
+    const turn = Number(TURN_LABEL.exec(label?.target ?? "")?.[1]);
+    if (Number.isInteger(turn) && turn > 0) hunk.turn = turn;
+  }
+  const kept = relationships.filter(
+    (r) =>
+      !(
+        (r.kind === "milestone" && TURN_LABEL.test(String(r.target))) ||
+        (r.kind === "task" &&
+          !objectives.some((o) => o.id === r.target) &&
+          snapshot.hunks.some(
+            (h) => h.id === r.hunkId && Number.isInteger(h.turn),
+          ))
+      ),
+  );
+  const labelled = new Set(
+    kept.filter((r) => r.kind === "milestone").map((r) => r.hunkId),
+  );
+  for (const hunk of snapshot.hunks ?? []) {
+    if (labelled.has(hunk.id) || !Number.isInteger(hunk.turn)) continue;
+    const objective = objectiveFor(hunk.turn);
+    if (
+      objective &&
+      !kept.some((r) => r.hunkId === hunk.id && r.kind === "task")
+    )
+      kept.push({
+        hunkId: hunk.id,
+        kind: "task",
+        target: objective.id,
+        provenance: objective.turn === hunk.turn ? "observed" : "inferred",
+        sourceId: hunk.sourceId,
+        rationale:
+          objective.turn === hunk.turn
+            ? "Saved checkpoint change recorded in the same turn as this request."
+            : "Saved checkpoint change continuing the objective first stated in turn " +
+              objective.turn +
+              ".",
+      });
+    kept.push({
+      hunkId: hunk.id,
+      kind: "milestone",
+      target: objective ? objective.title : "Unnamed work",
+      provenance: "inferred",
+      sourceId: hunk.sourceId,
+    });
+  }
+  for (const event of snapshot.events ?? []) {
+    if (event.type !== "checkpoint") continue;
+    const match = CHECKPOINT_TITLE.exec(event.title ?? "");
+    if (!match) continue;
+    const turn = Number(match[1]);
+    if (!Number.isInteger(event.turn)) event.turn = turn;
+    event.title =
+      (objectiveFor(turn)?.title ?? "Unnamed work") +
+      " · " +
+      match[2] +
+      " files changed";
+  }
+  snapshot.relationships = kept;
+  return snapshot;
 }
