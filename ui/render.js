@@ -187,7 +187,7 @@ function map(snapshot, p, state) {
   return `${coverage}<div class="map-toolbar"><span>${nodes.length} nodes · ${edges.filter((d) => d.kind !== "containment").length} dependencies</span><div><button data-action="zoom-out" aria-label="Zoom out">−</button><button data-action="fit">Fit map</button><button data-action="zoom-in" aria-label="Zoom in">+</button></div></div><div class="graph-scroll" tabindex="0" aria-label="Dependency map"><svg class="graph" style="width:${state.mapZoom ?? 100}%;min-width:${Math.round((width * 0.92 * (state.mapZoom ?? 100)) / 100)}px${compact ? `;max-width:${(390 * (state.mapZoom ?? 100)) / 100}px` : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Changed modules and recorded dependencies"><defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker><marker id="arrow-selected" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="selected-arrow" d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>${edges
     .map(
       (d) =>
-        `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""} ${incident(d) ? "selected" : ""}" d="${d.path}" marker-end="url(#${incident(d) ? "arrow-selected" : "arrow"})"><title>${e(d.evidenceFrom ?? d.from)} ${d.kind === "containment" ? "contains" : d.kind === "import" ? "imports from" : "depends on"} ${e(d.evidenceTo ?? d.to)}</title></path>`,
+        `<path class="graph-edge ${d.kind === "containment" ? "containment" : ""} ${incident(d) ? "selected" : ""}" data-from="${e(d.from)}" data-to="${e(d.to)}" pathLength="1" d="${d.path}" marker-end="url(#${incident(d) ? "arrow-selected" : "arrow"})"><title>${e(d.evidenceFrom ?? d.from)} ${d.kind === "containment" ? "contains" : d.kind === "import" ? "imports from" : "depends on"} ${e(d.evidenceTo ?? d.to)}</title></path>`,
     )
     .join("")}${nodes
     .map((n) => {
@@ -198,7 +198,7 @@ function map(snapshot, p, state) {
           (h.symbol && h.path + "::" + h.symbol === n),
       );
       const selected = hunks.some((h) => h.id === state.selected);
-      return `<g class="graph-node ${selected ? "selected" : ""}" ${hunks.length ? `data-select="${e(hunks[0].id)}" tabindex="0" role="button" aria-label="Inspect ${e(n)}"` : ""} transform="translate(${pos.x},${pos.y})"><rect width="230" height="${pos.height}" rx="9"/><text x="14" y="26">${e(n.length > 28 ? "…" + n.slice(-27) : n)}</text><text class="node-subtitle" x="14" y="48">${hunks.length ? `${hunks.length} ${hunks.length === 1 ? "change" : "changes"}` : "Dependency"}</text></g>`;
+      return `<g class="graph-node ${selected ? "selected" : ""}" data-node="${e(n)}" ${hunks.length ? `data-select="${e(hunks[0].id)}" tabindex="0" role="button" aria-label="Inspect ${e(n)}"` : ""} transform="translate(${pos.x},${pos.y})"><g class="node-body"><rect width="230" height="${pos.height}" rx="9"/><text x="14" y="26">${e(n.length > 28 ? "…" + n.slice(-27) : n)}</text><text class="node-subtitle" x="14" y="48">${hunks.length ? `${hunks.length} ${hunks.length === 1 ? "change" : "changes"}` : "Dependency"}</text></g></g>`;
     })
     .join(
       "",
