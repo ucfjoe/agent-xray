@@ -33,7 +33,7 @@ function story(snapshot, p, state) {
     p.groups
       .map(
         (g, i) =>
-          `<section class="story-group"><div class="story-title"><span class="step-number">${String(i + 1).padStart(2, "0")}</span><div><h2>${e(g.name === "Not yet linked" ? "Changes awaiting context" : g.name)}</h2><p>${new Set(g.hunks.map((h) => h.path)).size} files · ${g.hunks.length} changes</p></div></div><div class="story-files">${g.hunks
+          `<section class="story-group"><div class="story-title"><span class="step-number">${String(i + 1).padStart(2, "0")}</span><div><h2>${e(g.name)}</h2><p>${new Set(g.hunks.map((h) => h.path)).size} files · ${g.hunks.length} changes</p></div></div><div class="story-files">${g.hunks
             .map((h) =>
               fileRow(
                 h,
@@ -80,10 +80,20 @@ function explorer(p, state) {
       : empty("No matching changes", "Try another search or objective."))
   );
 }
+const EVENT_LABEL = {
+  request: "Request",
+  action: "Action",
+  checkpoint: "Checkpoint",
+  "status-question": "Question",
+  "unaligned-request": "Unaligned request",
+};
+
 function journey(snapshot, p, state) {
   const ids = new Set(p.hunks.map((h) => h.id));
   const events = newestFirst(snapshot.events).filter(
-    (ev) => !state.objectiveId || ev.objectiveId === state.objectiveId,
+    (ev) =>
+      ev.type !== "unaligned-request" &&
+      (!state.objectiveId || ev.objectiveId === state.objectiveId),
   );
   if (!events.length)
     return empty(
@@ -93,7 +103,7 @@ function journey(snapshot, p, state) {
   return `<div class="section-heading"><span>SESSION JOURNEY</span><span>${events.length} events · Newest first</span></div><ol class="timeline">${events
     .map((ev) => {
       const linked = (ev.hunkIds ?? []).filter((id) => ids.has(id));
-      return `<li class="timeline-event ${e(ev.type)}"><span class="timeline-dot"></span><div class="event-meta"><span>${e(ev.type)}</span><time>${Number.isFinite(ev.time) ? new Date(ev.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Time unavailable"}</time></div><h2>${e(ev.title)}</h2>${ev.description ? `<p class="event-description">${e(ev.description)}</p>` : ""}<div>${linked
+      return `<li class="timeline-event ${e(ev.type)}"><span class="timeline-dot"></span><div class="event-meta"><span>${e(EVENT_LABEL[ev.type] ?? ev.type)}</span><time>${Number.isFinite(ev.time) ? new Date(ev.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Time unavailable"}</time></div><h2>${e(ev.title)}</h2>${ev.description ? `<p class="event-description">${e(ev.description)}</p>` : ""}<div>${linked
         .map((id) => {
           const h = snapshot.hunks.find((h) => h.id === id);
           return button(
@@ -231,7 +241,7 @@ function detail(snapshot, h, state, p) {
     )
     .join(
       "",
-    )}</div>${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
+    )}</div>${action ? `<div class="action-source"><span>Recorded action</span><strong>${e(action.title)}</strong></div>` : ""}</details><details class="context-card" open><summary><span>✓</span> Verification</summary>${checks.length ? checks.map((c) => `<div class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.processOutcome ? `<span class="badge process">${e(c.processOutcome)}</span>` : ""}${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association ?? (c.provenance === "demo" ? "Illustrative result, not an executed test." : ""))}</p></div>`).join("") : "<p>No verification is linked to this exact change. Session commands are available below; they are not automatically proof this code passed.</p>"}</details></section>`;
 }
 export function render(
   snapshot,
@@ -292,7 +302,7 @@ export function render(
           .map((c) => projectCheck(snapshot, c))
           .map(
             (c) =>
-              `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`,
+              `<article class="check"><span class="badge ${e(c.status)}">${e(c.status)}</span>${c.processOutcome ? `<span class="badge process">${e(c.processOutcome)}</span>` : ""}${c.toolOutcome === "failed" ? '<span class="badge failed">Tool failed</span>' : ""}<code>${e(c.command)}</code><pre>${e(c.output)}</pre><p>${e(c.association)}</p></article>`,
           )
           .join("")}</details>`
       : ""
